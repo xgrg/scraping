@@ -47,45 +47,45 @@ def _autofit(ws, min_w=8, max_w=40):
         )
 
 
-def _result_fill(score_thuir, score_adv):
-    if score_thuir > score_adv:
+def _result_fill(score_home, score_opponent):
+    if score_home > score_opponent:
         return WIN_FILL
-    if score_thuir < score_adv:
+    if score_home < score_opponent:
         return LOSS_FILL
     return DRAW_FILL
 
 
 def _sheet_matches(wb, df):
-    ws = wb.create_sheet("Matchs")
+    ws = wb.create_sheet("Matches")
     ws.sheet_view.showGridLines = False
 
     cols = [
-        "Équipe",
+        "Team",
         "Phase",
         "Match",
-        "Domicile/Ext.",
-        "Adversaire",
-        "Score Thuir",
-        "Score Adv",
-        "Classement Thuir",
-        "Classement Adv",
+        "Home/Away",
+        "Opponent",
+        "Score",
+        "Opponent Score",
+        "Ranking",
+        "Opponent Ranking",
     ]
     _header_row(ws, cols)
 
     for i, row in enumerate(df.itertuples(), 2):
         alt = ALT_FILL if i % 2 == 0 else None
-        fill = _result_fill(row.score_thuir, row.score_adv)
+        fill = _result_fill(row.score_home, row.score_opponent)
 
         values = [
-            f"Équipe {row.num_equipe_thuir}",
+            f"Team {row.team_id}",
             row.idx_phase,
             row.idx_match,
-            "Domicile" if row.at_home else "Extérieur",
-            row.nom_eq_adv,
-            row.score_thuir,
-            row.score_adv,
-            row.classement_total_thuir,
-            row.classement_total_adv,
+            "Home" if row.at_home else "Away",
+            row.opponent_name,
+            row.score_home,
+            row.score_opponent,
+            row.ranking_home,
+            row.ranking_opponent,
         ]
 
         for col_idx, val in enumerate(values, 1):
@@ -101,32 +101,32 @@ def _sheet_matches(wb, df):
     ws.freeze_panes = "A2"
     _autofit(ws)
 
-    # Totaux
+    # Summary stats
     last = len(df) + 1
-    ws.cell(row=last + 2, column=1, value="Victoires").font = TITLE_FONT
+    ws.cell(row=last + 2, column=1, value="Wins").font = TITLE_FONT
     ws.cell(row=last + 2, column=2, value=f'=COUNTIF(F2:F{last},">"&G2:G{last})')
-    ws.cell(row=last + 3, column=1, value="Défaites").font = TITLE_FONT
+    ws.cell(row=last + 3, column=1, value="Losses").font = TITLE_FONT
     ws.cell(row=last + 3, column=2, value=f'=COUNTIF(F2:F{last},"<"&G2:G{last})')
-    ws.cell(row=last + 4, column=1, value="Nuls").font = TITLE_FONT
+    ws.cell(row=last + 4, column=1, value="Draws").font = TITLE_FONT
     ws.cell(row=last + 4, column=2, value=f'=COUNTIF(F2:F{last},"="&G2:G{last})')
 
 
 def _sheet_simples(wb, df):
-    ws = wb.create_sheet("Simples")
+    ws = wb.create_sheet("Singles")
     ws.sheet_view.showGridLines = False
 
     cols = [
         "Phase",
         "Match",
-        "Équipe",
-        "Joueur Thuir",
+        "Team",
+        "Player",
         "Pos.",
-        "Classement",
-        "Joueur Adv.",
-        "Pos. Adv.",
-        "Class. Adv.",
-        "Résultat",
-        "Domicile/Ext.",
+        "Ranking",
+        "Opponent Player",
+        "Opp. Pos.",
+        "Opp. Ranking",
+        "Result",
+        "Home/Away",
     ]
     _header_row(ws, cols)
 
@@ -137,15 +137,15 @@ def _sheet_simples(wb, df):
         values = [
             row.idx_phase,
             row.idx_match,
-            f"Équipe {row.num_eq_thuir}" if row.num_eq_thuir else "",
-            row.player_thuir,
-            row.position_thuir,
-            row.ranking_thuir,
-            row.player_adv,
-            row.position_adv,
-            row.ranking_adv,
-            "Victoire" if row.wins else "Défaite",
-            "Domicile" if row.at_home else "Extérieur",
+            f"Team {row.team_id}" if row.team_id else "",
+            row.player_home,
+            row.position_home,
+            row.ranking_home,
+            row.player_opponent,
+            row.position_opponent,
+            row.ranking_opponent,
+            "Win" if row.wins else "Loss",
+            "Home" if row.at_home else "Away",
         ]
 
         for col_idx, val in enumerate(values, 1):
@@ -160,13 +160,13 @@ def _sheet_simples(wb, df):
     ws.freeze_panes = "A2"
     _autofit(ws)
 
-    # Stats par joueur
+    # Player statistics
     last = len(df) + 1
-    ws.cell(row=last + 2, column=1, value="Stats par joueur").font = Font(
+    ws.cell(row=last + 2, column=1, value="Player Stats").font = Font(
         name="Arial", bold=True, size=11, color="1E2130"
     )
 
-    stat_cols = ["Joueur", "Matchs joués", "Victoires", "Défaites", "Win rate"]
+    stat_cols = ["Player", "Matches Played", "Wins", "Losses", "Win Rate"]
     for col_idx, label in enumerate(stat_cols, 1):
         cell = ws.cell(row=last + 3, column=col_idx, value=label)
         cell.font = HDR_FONT
@@ -174,7 +174,7 @@ def _sheet_simples(wb, df):
         cell.border = BORDER
         cell.alignment = CENTER
 
-    players = df.groupby("player_thuir")
+    players = df.groupby("player_home")
     stat_start = last + 4
     for s_row, (player, grp) in enumerate(players, stat_start):
         played = len(grp)
@@ -203,13 +203,13 @@ def _sheet_doubles(wb, df):
     cols = [
         "Phase",
         "Match",
-        "Équipe",
-        "Joueur Thuir 1",
-        "Joueur Thuir 2",
-        "Joueur Adv. 1",
-        "Joueur Adv. 2",
-        "Résultat",
-        "Domicile/Ext.",
+        "Team",
+        "Player 1",
+        "Player 2",
+        "Opponent 1",
+        "Opponent 2",
+        "Result",
+        "Home/Away",
     ]
     _header_row(ws, cols)
 
@@ -220,13 +220,13 @@ def _sheet_doubles(wb, df):
         values = [
             row.idx_phase,
             row.idx_match,
-            f"Équipe {row.num_eq_thuir}" if row.num_eq_thuir else "",
-            row.joueur_thuir_1,
-            row.joueur_thuir_2,
-            row.joueur_adv_1,
-            row.joueur_adv_2,
-            "Victoire" if row.wins else "Défaite",
-            "Domicile" if row.at_home else "Extérieur",
+            f"Team {row.team_id}" if row.team_id else "",
+            row.player_home_1,
+            row.player_home_2,
+            row.player_opponent_1,
+            row.player_opponent_2,
+            "Win" if row.wins else "Loss",
+            "Home" if row.at_home else "Away",
         ]
 
         for col_idx, val in enumerate(values, 1):
@@ -245,7 +245,7 @@ def _sheet_doubles(wb, df):
 
 
 def _sheet_summary(wb, matches_df, simples_df, doubles_df):
-    ws = wb.create_sheet("Résumé", 0)
+    ws = wb.create_sheet("Summary", 0)
     ws.sheet_view.showGridLines = False
     ws.column_dimensions["A"].width = 30
     ws.column_dimensions["B"].width = 18
@@ -271,40 +271,40 @@ def _sheet_summary(wb, matches_df, simples_df, doubles_df):
         return row + 1
 
     r = 1
-    r = section(r, "Vue d'ensemble")
+    r = section(r, "Overview")
 
-    n_teams = matches_df["num_equipe_thuir"].nunique()
+    n_teams = matches_df["team_id"].nunique()
     n_phases = matches_df["idx_phase"].nunique()
-    r = kv(r, "Nombre d'équipes", n_teams)
-    r = kv(r, "Phases jouées", n_phases)
-    r = kv(r, "Matchs par équipe totaux", len(matches_df))
+    r = kv(r, "Number of Teams", n_teams)
+    r = kv(r, "Phases Played", n_phases)
+    r = kv(r, "Total Matches per Team", len(matches_df))
 
     r += 1
-    r = section(r, "Résultats matchs par équipe")
-    for team in sorted(matches_df["num_equipe_thuir"].unique()):
-        grp = matches_df[matches_df["num_equipe_thuir"] == team]
-        wins = int((grp["score_thuir"] > grp["score_adv"]).sum())
-        draws = int((grp["score_thuir"] == grp["score_adv"]).sum())
-        lost = int((grp["score_thuir"] < grp["score_adv"]).sum())
-        r = kv(r, f"Équipe {team} (V/N/D)", f"{wins} / {draws} / {lost}")
+    r = section(r, "Match Results by Team")
+    for team in sorted(matches_df["team_id"].unique()):
+        grp = matches_df[matches_df["team_id"] == team]
+        wins = int((grp["score_home"] > grp["score_opponent"]).sum())
+        draws = int((grp["score_home"] == grp["score_opponent"]).sum())
+        lost = int((grp["score_home"] < grp["score_opponent"]).sum())
+        r = kv(r, f"Team {team} (W/D/L)", f"{wins} / {draws} / {lost}")
 
     r += 1
-    r = section(r, "Simples")
+    r = section(r, "Singles")
     total_s = len(simples_df)
     wins_s = int(simples_df["wins"].sum())
-    r = kv(r, "Matchs simples joués", total_s)
-    r = kv(r, "Victoires", wins_s)
-    r = kv(r, "Défaites", total_s - wins_s)
-    r = kv(r, "Win rate", f"{wins_s / total_s:.1%}" if total_s else "–")
+    r = kv(r, "Singles Matches Played", total_s)
+    r = kv(r, "Wins", wins_s)
+    r = kv(r, "Losses", total_s - wins_s)
+    r = kv(r, "Win Rate", f"{wins_s / total_s:.1%}" if total_s else "–")
 
     r += 1
     r = section(r, "Doubles")
     total_d = len(doubles_df)
     wins_d = int(doubles_df["wins"].sum())
-    r = kv(r, "Matchs doubles joués", total_d)
-    r = kv(r, "Victoires", wins_d)
-    r = kv(r, "Défaites", total_d - wins_d)
-    r = kv(r, "Win rate", f"{wins_d / total_d:.1%}" if total_d else "–")
+    r = kv(r, "Doubles Matches Played", total_d)
+    r = kv(r, "Wins", wins_d)
+    r = kv(r, "Losses", total_d - wins_d)
+    r = kv(r, "Win Rate", f"{wins_d / total_d:.1%}" if total_d else "–")
 
 
 def build_excel_report(matches_df, simples_df, doubles_df, output_path="report.xlsx"):

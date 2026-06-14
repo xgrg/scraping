@@ -1,11 +1,11 @@
-"""Statistics helpers for Thuir match and player performance data."""
+"""Statistics helpers for club match and player performance data."""
 
 import pandas as pd
 import numpy as np
 
 
 def build_pair_stats(df):
-    """Build statistics for Thuir doubles pairs.
+    """Build statistics for home team doubles pairs.
 
     Returns a DataFrame with unordered pairs, match counts, wins, losses, and win rate.
     """
@@ -13,7 +13,7 @@ def build_pair_stats(df):
 
     # unordered pair key
     tmp["pair"] = tmp.apply(
-        lambda r: tuple(sorted([r["joueur_thuir_1"], r["joueur_thuir_2"]])), axis=1
+        lambda r: tuple(sorted([r["player_home_1"], r["player_home_2"]])), axis=1
     )
 
     # played
@@ -39,8 +39,8 @@ def build_pair_stats(df):
 
 
 def build_individual_stats(df):
-    """Build individual player statistics from Thuir match rows."""
-    stats = df.groupby("player_thuir").agg(
+    """Build individual player statistics from home team match rows."""
+    stats = df.groupby("player_home").agg(
         n_played=("wins", "count"), n_won=("wins", "sum")
     )
 
@@ -55,20 +55,20 @@ def compute_perfs(df: pd.DataFrame):
     df = df.copy()
 
     # safe numeric conversions
-    df["ranking_thuir"] = pd.to_numeric(df["ranking_thuir"], errors="coerce")
-    df["ranking_adv"] = pd.to_numeric(df["ranking_adv"], errors="coerce")
+    df["ranking_home"] = pd.to_numeric(df["ranking_home"], errors="coerce")
+    df["ranking_opponent"] = pd.to_numeric(df["ranking_opponent"], errors="coerce")
     df["wins"] = df["wins"].astype(str).str.upper().map({"TRUE": True, "FALSE": False})
 
     # ranking gap (positive = opponent is higher ranked)
-    df["rank_gap"] = df["ranking_adv"] - df["ranking_thuir"]
+    df["rank_gap"] = df["ranking_opponent"] - df["ranking_home"]
 
     # performance score:
     # - win against a better-ranked opponent => positive strong performance
     # - loss against a lower-ranked opponent => negative strong underperformance
     df["perf_score"] = np.where(
         df["wins"],
-        df["rank_gap"],  # gagner contre mieux classé = positif
-        -df["rank_gap"],  # perdre contre moins bien classé = négatif
+        df["rank_gap"],  # win against better-ranked = positive
+        -df["rank_gap"],  # lose against lower-ranked = negative
     )
 
     # top performances
@@ -84,7 +84,7 @@ def compute_perfs(df: pd.DataFrame):
 
 
 def analyze_home_away_performance(df):
-    """Analyze home/away win rates for individual Thuir players."""
+    """Analyze home/away win rates for individual home team players."""
     df = df.copy()
 
     df["wins"] = df["wins"].astype(bool)
@@ -92,7 +92,7 @@ def analyze_home_away_performance(df):
 
     # aggregation
     agg = (
-        df.groupby(["player_thuir", "at_home"])
+        df.groupby(["player_home", "at_home"])
         .agg(matches=("wins", "size"), wins_count=("wins", "sum"))
         .reset_index()
     )

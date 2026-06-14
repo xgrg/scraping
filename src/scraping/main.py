@@ -15,8 +15,8 @@ from scraping.stats import analyze_home_away_performance
 from scraping.plot import (
     plot_home_away_performance,
     plot_player_participations_by_phase,
-    plot_thuir_series,
-    plot_thuir_match_matrix,
+    plot_team_match_matrix,
+    plot_team_series,
 )
 from scraping.report import build_excel_report
 
@@ -102,8 +102,8 @@ def analyze(req: AnalyzeRequest):
             home_away_df = analyze_home_away_performance(simples_df)
             plot_home_away_performance(home_away_df, save_path=p_home_away)
             plot_player_participations_by_phase(simples_df, save_path=p_participations)
-            plot_thuir_series(matches_df, save_path=p_series)
-            plot_thuir_match_matrix(matches_df, save_path=p_matrix)
+            plot_team_series(matches_df, save_path=p_series)
+            plot_team_match_matrix(matches_df, save_path=p_matrix)
         except Exception as e:
             raise HTTPException(
                 status_code=500, detail=f"Erreur génération plots : {e}"

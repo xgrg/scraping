@@ -1,7 +1,8 @@
-"""FFTT scraping utilities for Thuir team data.
+"""FFTT scraping utilities for club team data.
 
-This module provides a client for fetching FFTT match pages, parsing the
-match structure, and converting scraped HTML into pandas DataFrames.
+This module provides a client for fetching FFTT match pages from the pingpocket
+service, parsing the match structure, and converting scraped HTML into pandas
+DataFrames.
 """
 
 import json
@@ -47,7 +48,7 @@ def _load_lid(config_path=None):
 
 
 class FFTTClient:
-    """Client for scraping FFTT match pages and parsing Thuir team results.
+    """Client for scraping FFTT match pages and parsing team results.
 
     The client can read authentication cookies from a local config file when a
     cookie set is not provided explicitly.
@@ -99,7 +100,7 @@ class FFTTClient:
     # BUILD MATCH INDEX (per phase)
     # =========================================================
     def _build_matches(self, soup):
-        """Build a map of Thuir teams to their match page URLs for one phase."""
+        """Build a map of all teams to their match page URLs for one phase."""
         matches = {}
 
         for pool in soup.select("ul.rounded.pool-ranking"):
@@ -109,9 +110,6 @@ class FFTTClient:
 
             team_name = team_link.get_text(strip=True)
 
-            if not team_name.startswith("THUIR TT"):
-                continue
-
             matches[team_name] = [
                 self._fetch("http://pingpocket.fr" + a["href"])
                 for a in pool.select("li.score.arrow > a[href]")
@@ -120,10 +118,10 @@ class FFTTClient:
         return matches
 
     # =========================================================
-    # PARSE MATCH → THUIR-CENTRIC ROWS
+    # PARSE MATCH → HOME TEAM-CENTRIC ROWS
     # =========================================================
     def _parse_match(self, soup, team_name, idx_match, idx_phase):
-        """Parse one match page into Thuir-centric match, singles, and doubles rows."""
+        """Parse one match page into home team-centric match, singles, and doubles rows."""
         title = soup.select_one("div.toolbar h1").get_text(strip=True)
         team_left, team_right = map(str.strip, title.split(" vs "))
 
@@ -150,14 +148,14 @@ class FFTTClient:
             score_left = np.nan
             score_right = np.nan
 
-        thuir_is_left = team_left == team_name
+        home_is_left = team_left == team_name
 
-        score_thuir = score_left if thuir_is_left else score_right
-        score_adv = score_right if thuir_is_left else score_left
-        nom_eq_adv = team_right if thuir_is_left else team_left
+        score_home = score_left if home_is_left else score_right
+        score_opponent = score_right if home_is_left else score_left
+        opponent_name = team_right if home_is_left else team_left
 
-        num_eq = re.search(r"THUIR\s*TT\s*\(?\s*(\d+)\s*\)?", team_name)
-        num_eq = int(num_eq.group(1)) if num_eq else None
+        team_id = re.search(r"\(?\s*(\d+)\s*\)?", team_name)
+        team_id = int(team_id.group(1)) if team_id else None
 
         # ==========================================================
         # Team composition
@@ -218,19 +216,19 @@ class FFTTClient:
             left_team_ranking = np.nan
             right_team_ranking = np.nan
 
-        if thuir_is_left:
-            thuir_players = left_players
-            adv_players = right_players
+        if home_is_left:
+            home_players = left_players
+            opponent_players = right_players
 
-            classement_total_thuir = left_team_ranking
-            classement_total_adv = right_team_ranking
+            ranking_home = left_team_ranking
+            ranking_opponent = right_team_ranking
 
         else:
-            thuir_players = right_players
-            adv_players = left_players
+            home_players = right_players
+            opponent_players = left_players
 
-            classement_total_thuir = right_team_ranking
-            classement_total_adv = left_team_ranking
+            ranking_home = right_team_ranking
+            ranking_opponent = left_team_ranking
 
         # ==========================================================
         # Match sheet
@@ -279,36 +277,36 @@ class FFTTClient:
             # ======================================================
 
             if not is_double:
-                if not thuir_is_left:
-                    player_thuir = left_name
-                    player_adv = right_name
+                if not home_is_left:
+                    player_home = left_name
+                    player_opponent = right_name
                     wins = left_win
                 else:
-                    player_thuir = right_name
-                    player_adv = left_name
+                    player_home = right_name
+                    player_opponent = left_name
                     wins = right_win
 
-                thuir_info = thuir_players.get(
-                    player_thuir, {"position": None, "ranking": np.nan}
+                home_info = home_players.get(
+                    player_home, {"position": None, "ranking": np.nan}
                 )
 
-                adv_info = adv_players.get(
-                    player_adv, {"position": None, "ranking": np.nan}
+                opponent_info = opponent_players.get(
+                    player_opponent, {"position": None, "ranking": np.nan}
                 )
 
                 simples.append(
                     {
-                        "player_thuir": player_thuir,
-                        "position_thuir": thuir_info["position"],
-                        "ranking_thuir": thuir_info["ranking"],
-                        "player_adv": player_adv,
-                        "position_adv": adv_info["position"],
-                        "ranking_adv": adv_info["ranking"],
+                        "player_home": player_home,
+                        "position_home": home_info["position"],
+                        "ranking_home": home_info["ranking"],
+                        "player_opponent": player_opponent,
+                        "position_opponent": opponent_info["position"],
+                        "ranking_opponent": opponent_info["ranking"],
                         "wins": wins,
-                        "num_eq_thuir": num_eq,
+                        "team_id": team_id,
                         "idx_match": idx_match,
                         "idx_phase": idx_phase,
-                        "at_home": thuir_is_left,
+                        "at_home": home_is_left,
                     }
                 )
 
@@ -320,39 +318,39 @@ class FFTTClient:
                 left_split = [x.strip() for x in left_name.split(" et ")]
                 right_split = [x.strip() for x in right_name.split(" et ")]
 
-                if not thuir_is_left:
-                    jt1, jt2 = left_split
-                    ja1, ja2 = right_split
+                if not home_is_left:
+                    player_home_1, player_home_2 = left_split
+                    player_opponent_1, player_opponent_2 = right_split
                     wins = left_win
                 else:
-                    jt1, jt2 = right_split
-                    ja1, ja2 = left_split
+                    player_home_1, player_home_2 = right_split
+                    player_opponent_1, player_opponent_2 = left_split
                     wins = right_win
 
                 doubles.append(
                     {
-                        "joueur_thuir_1": jt1,
-                        "joueur_thuir_2": jt2,
-                        "joueur_adv_1": ja1,
-                        "joueur_adv_2": ja2,
+                        "player_home_1": player_home_1,
+                        "player_home_2": player_home_2,
+                        "player_opponent_1": player_opponent_1,
+                        "player_opponent_2": player_opponent_2,
                         "wins": wins,
-                        "num_eq_thuir": num_eq,
+                        "team_id": team_id,
                         "idx_match": idx_match,
                         "idx_phase": idx_phase,
-                        "at_home": thuir_is_left,
+                        "at_home": home_is_left,
                     }
                 )
 
         match = {
-            "num_equipe_thuir": num_eq,
-            "nom_eq_adv": nom_eq_adv,
-            "score_thuir": score_thuir,
-            "score_adv": score_adv,
-            "classement_total_thuir": classement_total_thuir,
-            "classement_total_adv": classement_total_adv,
+            "team_id": team_id,
+            "opponent_name": opponent_name,
+            "score_home": score_home,
+            "score_opponent": score_opponent,
+            "ranking_home": ranking_home,
+            "ranking_opponent": ranking_opponent,
             "idx_match": idx_match,
             "idx_phase": idx_phase,
-            "at_home": thuir_is_left,
+            "at_home": home_is_left,
         }
 
         return match, simples, doubles
@@ -396,7 +394,7 @@ class FFTTClient:
     # PUBLIC API (MULTI-PHASE)
     # =========================================================
     def scrape_club(self, club_id, phases=(1, 2)):
-        """Scrape the Thuir team pages for the given phase URLs.
+        """Scrape club team pages for the given phase URLs.
 
         Returns three DataFrames: matches, singles, and doubles.
         """

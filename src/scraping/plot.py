@@ -1,4 +1,4 @@
-"""Plot helpers for Thuir match performance analysis."""
+"""Plot helpers for team match performance analysis."""
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +18,7 @@ def _save_or_show(fig, save_path=None):
 
 
 def plot_player_participations_by_phase(df, save_path=None):
-    """Plot grouped bar chart of Thuir player participation counts by phase.
+    """Plot grouped bar chart of player participation counts by phase.
 
     Args:
         df: Match DataFrame.
@@ -26,7 +26,7 @@ def plot_player_participations_by_phase(df, save_path=None):
                    If None, the figure is displayed interactively.
     """
     # Count participations by player and phase
-    counts = df.groupby(["player_thuir", "idx_phase"]).size().unstack(fill_value=0)
+    counts = df.groupby(["player_home", "idx_phase"]).size().unstack(fill_value=0)
 
     # Sort by total participation count
     counts = counts.loc[counts.sum(axis=1).sort_values(ascending=False).index]
@@ -50,7 +50,7 @@ def plot_player_participations_by_phase(df, save_path=None):
 
 
 def plot_home_away_performance(df_result, top_n=None, save_path=None):
-    """Plot home vs away win rates for Thuir players.
+    """Plot home vs away win rates for players.
 
     Args:
         df_result: DataFrame returned by analyze_home_away_performance.
@@ -90,8 +90,8 @@ def plot_home_away_performance(df_result, top_n=None, save_path=None):
 # plot_home_away_performance(analyze_home_away_performance(simples_df), save_path="output/home_away.jpg")
 
 
-def plot_thuir_series(df, save_path=None):
-    """Plot Thuir team ranking progression across phases and matches.
+def plot_team_series(df, save_path=None):
+    """Plot team ranking progression across phases and matches.
 
     Args:
         df: Match DataFrame.
@@ -101,16 +101,16 @@ def plot_thuir_series(df, save_path=None):
     df = df.copy()
 
     def get_result(row):
-        if row["score_thuir"] > row["score_adv"]:
+        if row["score_home"] > row["score_opponent"]:
             return "win"
-        elif row["score_thuir"] == row["score_adv"]:
+        elif row["score_home"] == row["score_opponent"]:
             return "draw"
         else:
             return "loss"
 
     df["result"] = df.apply(get_result, axis=1)
 
-    teams = sorted(df["num_equipe_thuir"].unique())
+    teams = sorted(df["team_id"].unique())
 
     nrows = len(teams)
     ncols = 2  # phase 1 / phase 2
@@ -118,44 +118,44 @@ def plot_thuir_series(df, save_path=None):
     fig, axes = plt.subplots(
         nrows=nrows, ncols=ncols, figsize=(18, 4 * nrows), sharex=False, sharey=False
     )
-    fig.suptitle("Évolution des classements Thuir", fontsize=16)
+    fig.suptitle("Team ranking evolution", fontsize=16)
 
     # If there is only one team, ensure axes remains iterable
     if nrows == 1:
         axes = [axes]
 
     for row_idx, team in enumerate(teams):
-        dft = df[df["num_equipe_thuir"] == team].sort_values(["idx_phase", "idx_match"])
+        dft = df[df["team_id"] == team].sort_values(["idx_phase", "idx_match"])
 
         for col_idx, phase in enumerate([1, 2]):
             ax = axes[row_idx][col_idx] if nrows > 1 else axes[col_idx]
 
             dfp = dft[dft["idx_phase"] == phase]
 
-            ax.set_title(f"Équipe {team} - Phase {phase}")
+            ax.set_title(f"Team {team} - Phase {phase}")
 
             if dfp.empty:
-                ax.text(0.5, 0.5, "Aucun match", ha="center")
+                ax.text(0.5, 0.5, "No matches", ha="center")
                 ax.axis("off")
                 continue
 
             x = list(range(len(dfp)))
 
             labels = [
-                f"{opp} ({'D' if home else 'E'})"
-                for opp, home in zip(dfp["nom_eq_adv"], dfp["at_home"])
+                f"{opp} ({'H' if home else 'A'})"
+                for opp, home in zip(dfp["opponent_name"], dfp["at_home"])
             ]
 
             # Plot lines
-            ax.plot(x, dfp["classement_total_thuir"], color="green", label="Thuir")
-            ax.plot(x, dfp["classement_total_adv"], color="red", label="Opponent")
+            ax.plot(x, dfp["ranking_home"], color="green", label="Home Team")
+            ax.plot(x, dfp["ranking_opponent"], color="red", label="Opponent")
 
-            # Thuir markers
+            # Home team markers
             for i, row in enumerate(dfp.itertuples()):
-                if row.score_thuir > row.score_adv:
+                if row.score_home > row.score_opponent:
                     marker = "*"
                     size = 240
-                elif row.score_thuir == row.score_adv:
+                elif row.score_home == row.score_opponent:
                     marker = "s"
                     size = 90
                 else:
@@ -164,7 +164,7 @@ def plot_thuir_series(df, save_path=None):
 
                 ax.scatter(
                     i,
-                    row.classement_total_thuir,
+                    row.ranking_home,
                     marker=marker,
                     color="green",
                     s=size,
@@ -174,7 +174,7 @@ def plot_thuir_series(df, save_path=None):
             # Opponent markers (discrete circles)
             ax.scatter(
                 x,
-                dfp["classement_total_adv"],
+                dfp["ranking_opponent"],
                 marker="o",
                 color="lightcoral",
                 alpha=0.4,
@@ -208,11 +208,11 @@ def plot_thuir_series(df, save_path=None):
     _save_or_show(fig, save_path)
 
 
-# plot_thuir_series(matches_df, save_path="output/series.jpg")
+# plot_team_series(matches_df, save_path="output/series.jpg")
 
 
-def plot_thuir_match_matrix(df, save_path=None):
-    """Plot a Thuir match matrix showing results and opponent names per match.
+def plot_team_match_matrix(df, save_path=None):
+    """Plot a team match matrix showing results and opponent names per match.
 
     Args:
         df: Match DataFrame.
@@ -247,7 +247,7 @@ def plot_thuir_match_matrix(df, save_path=None):
 
     n_matches = len(match_keys)
 
-    teams = sorted(df["num_equipe_thuir"].unique())
+    teams = sorted(df["team_id"].unique())
     n_teams = len(teams)
 
     fig, ax = plt.subplots(figsize=(max(12, n_matches), 1.2 * n_teams))
@@ -258,7 +258,7 @@ def plot_thuir_match_matrix(df, save_path=None):
     ax.invert_yaxis()
 
     ax.set_yticks(range(n_teams))
-    ax.set_yticklabels([f"Équipe {t}" for t in teams])
+    ax.set_yticklabels([f"Team {t}" for t in teams])
 
     ax.set_xticks(range(n_matches))
     ax.set_xticklabels(match_keys, rotation=90)
@@ -274,7 +274,7 @@ def plot_thuir_match_matrix(df, save_path=None):
         col += 1
 
     for i, team in enumerate(teams):
-        dft = df[df["num_equipe_thuir"] == team]
+        dft = df[df["team_id"] == team]
 
         for row in dft.itertuples():
             if row.match_key not in match_to_col:
@@ -283,9 +283,9 @@ def plot_thuir_match_matrix(df, save_path=None):
             col = match_to_col[row.match_key]
 
             # result color
-            if row.score_thuir > row.score_adv:
+            if row.score_home > row.score_opponent:
                 color = "#68876e"
-            elif row.score_thuir == row.score_adv:
+            elif row.score_home == row.score_opponent:
                 color = "white"
             else:
                 color = "#ff876e"
@@ -299,7 +299,7 @@ def plot_thuir_match_matrix(df, save_path=None):
             )
 
             # + / -
-            sign = "+" if row.classement_total_thuir > row.classement_total_adv else "—"
+            sign = "+" if row.ranking_home > row.ranking_opponent else "—"
 
             ax.text(
                 col,
@@ -313,12 +313,12 @@ def plot_thuir_match_matrix(df, save_path=None):
             )
 
             # opponent name diagonally
-            home_flag = "D" if row.at_home else "E"
+            home_flag = "H" if row.at_home else "A"
 
             ax.text(
                 col,
                 i,
-                f"{row.nom_eq_adv} ({home_flag})",
+                f"{row.opponent_name} ({home_flag})",
                 ha="center",
                 va="center",
                 rotation=45,
@@ -333,10 +333,10 @@ def plot_thuir_match_matrix(df, save_path=None):
         sep = len(phase1)
         ax.axvline(sep - 0.5, color="black", linewidth=1.5, alpha=0.4)
 
-    ax.set_title("Matrice des confrontations Thuir")
+    ax.set_title("Match Results Matrix")
     plt.tight_layout()
 
     _save_or_show(fig, save_path)
 
 
-# plot_thuir_match_matrix(matches_df, save_path="output/match_matrix.jpg")
+# plot_team_match_matrix(matches_df, save_path="output/match_matrix.jpg")
