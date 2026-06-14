@@ -19,6 +19,7 @@ from scraping.plot import (
     plot_team_series,
 )
 from scraping.report import build_excel_report
+from loguru import logger
 
 app = FastAPI(title="TT Stats API")
 
@@ -105,6 +106,7 @@ def analyze(req: AnalyzeRequest):
             plot_team_series(matches_df, save_path=p_series)
             plot_team_match_matrix(matches_df, save_path=p_matrix)
         except Exception as e:
+            logger.error(e)
             raise HTTPException(
                 status_code=500, detail=f"Erreur génération plots : {e}"
             )

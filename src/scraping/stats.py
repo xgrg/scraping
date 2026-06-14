@@ -100,7 +100,7 @@ def analyze_home_away_performance(df):
     agg["win_rate"] = agg["wins_count"] / agg["matches"]
 
     # explicit pivot with controlled column names
-    pivot = agg.pivot(index="player_thuir", columns="at_home", values="win_rate")
+    pivot = agg.pivot(index="player_home", columns="at_home", values="win_rate")
 
     # IMPORTANT: enforce both columns exist
     pivot = pivot.reindex(columns=[False, True])
@@ -108,7 +108,7 @@ def analyze_home_away_performance(df):
     pivot.columns = ["away_win_rate", "home_win_rate"]
 
     # additional statistics (kept separate)
-    counts = agg.pivot(index="player_thuir", columns="at_home", values="matches")
+    counts = agg.pivot(index="player_home", columns="at_home", values="matches")
     counts = counts.reindex(columns=[False, True])
     counts.columns = ["matches_away", "matches_home"]
 

@@ -9,11 +9,16 @@ import json
 import os
 import time
 import re
+from datetime import datetime, timedelta
+
 import requests
 import pandas as pd
 import numpy as np
 from bs4 import BeautifulSoup
 from loguru import logger
+
+_CACHE_FILENAME = ".fftt_cache.json"
+_CACHE_TTL = timedelta(days=30)
 
 
 def _load_lid(config_path=None):
@@ -83,10 +88,63 @@ class FFTTClient:
             }
         )
         self.matches = matches
+        self.cache_path = os.path.normpath(
+            os.path.join(os.path.dirname(__file__), "..", "..", _CACHE_FILENAME)
+        )
+        self.cache = self._load_cache()
 
-    # =========================================================
-    # FETCH
-    # =========================================================
+    def _load_cache(self):
+        """Load the on-disk cache file if available."""
+        if not os.path.exists(self.cache_path):
+            return {}
+
+        try:
+            with open(self.cache_path, "r", encoding="utf-8") as handle:
+                cache = json.load(handle)
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+        return cache
+
+    def _save_cache(self):
+        """Persist the cache to disk."""
+        try:
+            with open(self.cache_path, "w", encoding="utf-8") as handle:
+                json.dump(self.cache, handle, indent=2, ensure_ascii=False)
+        except OSError:
+            logger.warning("Unable to write FFTT cache file: %s", self.cache_path)
+
+    def _cache_url(self, club_id, url, html_text):
+        """Store a fetched HTML page into the cache for the given club."""
+        club_cache = self.cache.setdefault(str(club_id), {})
+        club_cache[url] = {
+            "fetched_at": datetime.utcnow().isoformat(),
+            "content": html_text,
+        }
+        self._save_cache()
+
+    def _cached_html(self, club_id, url):
+        """Return cached HTML for the given club and URL if fresh, otherwise None."""
+        if club_id is None:
+            return None
+
+        club_cache = self.cache.get(str(club_id), {})
+        entry = club_cache.get(url)
+        if not entry:
+            return None
+
+        try:
+            fetched_at = datetime.fromisoformat(entry["fetched_at"])
+        except (TypeError, ValueError):
+            return None
+
+        if datetime.utcnow() - fetched_at > _CACHE_TTL:
+            del club_cache[url]
+            self._save_cache()
+            return None
+
+        return entry.get("content")
+
     def _fetch(self, url):
         """Fetch a URL and return a parsed BeautifulSoup document."""
         if self.sleep:
@@ -96,10 +154,28 @@ class FFTTClient:
         r.raise_for_status()
         return BeautifulSoup(r.text, "html.parser")
 
+    def _fetch_cached(self, url, club_id=None):
+        """Fetch a URL with caching enabled for a club-specific key."""
+        html_text = self._cached_html(club_id, url)
+        if html_text is not None:
+            logger.debug("Using cached HTML for club %s: %s", club_id, url)
+            return BeautifulSoup(html_text, "html.parser")
+
+        if self.sleep:
+            time.sleep(self.sleep)
+
+        r = self.session.get(url, cookies=self.cookies)
+        r.raise_for_status()
+        html_text = r.text
+        if club_id is not None:
+            self._cache_url(club_id, url, html_text)
+
+        return BeautifulSoup(html_text, "html.parser")
+
     # =========================================================
     # BUILD MATCH INDEX (per phase)
     # =========================================================
-    def _build_matches(self, soup):
+    def _build_matches(self, soup, club_id=None):
         """Build a map of all teams to their match page URLs for one phase."""
         matches = {}
 
@@ -111,7 +187,7 @@ class FFTTClient:
             team_name = team_link.get_text(strip=True)
 
             matches[team_name] = [
-                self._fetch("http://pingpocket.fr" + a["href"])
+                self._fetch_cached("http://pingpocket.fr" + a["href"], club_id)
                 for a in pool.select("li.score.arrow > a[href]")
             ]
 
@@ -410,8 +486,8 @@ class FFTTClient:
                 url = f"{base_url}{idx_phase}"
                 logger.info(f"Scraping phase {idx_phase}: {url}")
 
-                soup = self._fetch(url)
-                self.matches.append(self._build_matches(soup))
+                soup = self._fetch_cached(url, club_id)
+                self.matches.append(self._build_matches(soup, club_id))
 
         for idx_phase in phases:
             for team_name, team_matches in self.matches[idx_phase - 1].items():
