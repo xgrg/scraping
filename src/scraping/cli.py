@@ -6,6 +6,5 @@ usage of the FFTTClient.
 
 # Example usage:
 # client = FFTTClient(matches=matches)
-# url = "https://www.pingpocket.fr/app/fftt/clubs/11660007/equipes/calendriers?phase="
 # matches = client.matches
-# matches_df, simples_df, doubles_df = client.scrape_thuir(url)
+# matches_df, simples_df, doubles_df = client.scrape_thuir(11660007)

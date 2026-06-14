@@ -2,11 +2,29 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 
-def plot_player_participations_by_phase(df):
-    """Plot grouped bar chart of Thuir player participation counts by phase."""
+def _save_or_show(fig, save_path=None):
+    """Save figure to JPG if save_path is provided, otherwise display it."""
+    if save_path is not None:
+        path = Path(save_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(path, format="jpg", dpi=150, bbox_inches="tight")
+        print(f"Figure saved to {path}")
+        plt.close(fig)
+    else:
+        plt.show()
 
+
+def plot_player_participations_by_phase(df, save_path=None):
+    """Plot grouped bar chart of Thuir player participation counts by phase.
+
+    Args:
+        df: Match DataFrame.
+        save_path: Optional path to save the figure as JPG (e.g. "output/chart.jpg").
+                   If None, the figure is displayed interactively.
+    """
     # Count participations by player and phase
     counts = df.groupby(["player_thuir", "idx_phase"]).size().unstack(fill_value=0)
 
@@ -14,7 +32,8 @@ def plot_player_participations_by_phase(df):
     counts = counts.loc[counts.sum(axis=1).sort_values(ascending=False).index]
 
     # Plot
-    ax = counts.plot(kind="bar", figsize=(12, 6), width=0.8)
+    fig, ax = plt.subplots(figsize=(12, 6))
+    counts.plot(kind="bar", width=0.8, ax=ax)
 
     ax.set_title("Participations par joueur et par phase")
     ax.set_xlabel("Joueur")
@@ -23,21 +42,24 @@ def plot_player_participations_by_phase(df):
 
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
-    plt.show()
+
+    _save_or_show(fig, save_path)
 
 
-# plot_player_participations_by_phase(simples_df)
+# plot_player_participations_by_phase(simples_df, save_path="output/participations.jpg")
 
 
-def plot_home_away_performance(df_result, top_n=None):
+def plot_home_away_performance(df_result, top_n=None, save_path=None):
     """Plot home vs away win rates for Thuir players.
 
-    df_result should be the DataFrame returned by analyze_home_away_performance.
+    Args:
+        df_result: DataFrame returned by analyze_home_away_performance.
+        top_n: Optional — limit to the top N players by difference.
+        save_path: Optional path to save the figure as JPG (e.g. "output/chart.jpg").
+                   If None, the figure is displayed interactively.
     """
-
     data = df_result.copy()
 
-    # Option: limit to the top N players by difference
     if top_n is not None:
         data = data.head(top_n)
 
@@ -48,26 +70,34 @@ def plot_home_away_performance(df_result, top_n=None):
     x = np.arange(len(players))
     width = 0.4
 
-    plt.figure(figsize=(max(10, len(players) * 0.6), 6))
+    fig, ax = plt.subplots(figsize=(max(10, len(players) * 0.6), 6))
 
-    plt.bar(x - width / 2, home, width, label="Domicile")
-    plt.bar(x + width / 2, away, width, label="Extérieur")
+    ax.bar(x - width / 2, home, width, label="Domicile")
+    ax.bar(x + width / 2, away, width, label="Extérieur")
 
-    plt.xticks(x, players, rotation=45, ha="right")
-    plt.ylabel("Win rate")
-    plt.title("Performance domicile vs extérieur par joueur")
-    plt.ylim(0, 1)
-    plt.legend()
+    ax.set_xticks(x)
+    ax.set_xticklabels(players, rotation=45, ha="right")
+    ax.set_ylabel("Win rate")
+    ax.set_title("Performance domicile vs extérieur par joueur")
+    ax.set_ylim(0, 1)
+    ax.legend()
 
     plt.tight_layout()
-    plt.show()
+
+    _save_or_show(fig, save_path)
 
 
-# plot_home_away_performance(analyze_home_away_performance(simples_df))
+# plot_home_away_performance(analyze_home_away_performance(simples_df), save_path="output/home_away.jpg")
 
 
-def plot_thuir_series(df):
-    """Plot Thuir team ranking progression across phases and matches."""
+def plot_thuir_series(df, save_path=None):
+    """Plot Thuir team ranking progression across phases and matches.
+
+    Args:
+        df: Match DataFrame.
+        save_path: Optional path to save the figure as JPG (e.g. "output/chart.jpg").
+                   If None, the figure is displayed interactively.
+    """
     df = df.copy()
 
     def get_result(row):
@@ -172,15 +202,23 @@ def plot_thuir_series(df):
             labels = [f"P{phase}-J{idx + 1}" for idx, _ in enumerate(dfp.itertuples())]
             ax.set_xticks(range(len(dfp)))
             ax.set_xticklabels(labels)
+
     plt.tight_layout(rect=[0, 0, 1, 0.97])
-    plt.show()
+
+    _save_or_show(fig, save_path)
 
 
-# plot_thuir_series(matches_df)
+# plot_thuir_series(matches_df, save_path="output/series.jpg")
 
 
-def plot_thuir_match_matrix(df):
-    """Plot a Thuir match matrix showing results and opponent names per match."""
+def plot_thuir_match_matrix(df, save_path=None):
+    """Plot a Thuir match matrix showing results and opponent names per match.
+
+    Args:
+        df: Match DataFrame.
+        save_path: Optional path to save the figure as JPG (e.g. "output/chart.jpg").
+                   If None, the figure is displayed interactively.
+    """
     df = df.copy()
 
     # match key
@@ -297,7 +335,8 @@ def plot_thuir_match_matrix(df):
 
     ax.set_title("Matrice des confrontations Thuir")
     plt.tight_layout()
-    plt.show()
+
+    _save_or_show(fig, save_path)
 
 
-# plot_thuir_match_matrix(matches_df)
+# plot_thuir_match_matrix(matches_df, save_path="output/match_matrix.jpg")

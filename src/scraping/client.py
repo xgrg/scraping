@@ -62,6 +62,11 @@ class FFTTClient:
         config_path: Optional path to the local FFTT config file.
         """
         if cookies is None:
+            if config_path is None:
+                config_path = os.path.normpath(
+                    os.path.join(os.path.dirname(__file__), "..", "..", ".fftt_config")
+                )
+
             lid = _load_lid(config_path)
             self.cookies = {"lid": lid}
         else:
@@ -352,14 +357,51 @@ class FFTTClient:
 
         return match, simples, doubles
 
+    def get_clubs(self, department) -> dict[str, str]:
+        """
+        Parse club HTML and return a dict of {club_name: club_id}.
+        Extracts club ID from the href URL and club name from the <p> tag.
+        """
+        url = f"https://www.pingpocket.fr/app/fftt/comites/{department}/clubs"
+
+        soup = self._fetch(url)
+
+        clubs = {}
+
+        for a_tag in soup.find_all("a", class_="item-container"):
+            href = a_tag.get("href", "")
+            # Extract the numeric ID from the URL path, e.g. /app/fftt/clubs/01010069
+            match = re.search(r"/clubs/(\w+)", href)
+            if not match:
+                continue
+
+            club_id = match.group(1)
+
+            # The club name is in the first <p> tag inside .labels
+            labels_div = a_tag.find("div", class_="labels")
+            if not labels_div:
+                continue
+
+            name_tag = labels_div.find("p")
+            if not name_tag:
+                continue
+
+            club_name = name_tag.get_text(strip=True)
+            if club_name:
+                clubs[club_name] = club_id
+
+        return clubs
+
     # =========================================================
     # PUBLIC API (MULTI-PHASE)
     # =========================================================
-    def scrape_thuir(self, base_url, phases=(1, 2)):
+    def scrape_club(self, club_id, phases=(1, 2)):
         """Scrape the Thuir team pages for the given phase URLs.
 
         Returns three DataFrames: matches, singles, and doubles.
         """
+        base_url = f"https://www.pingpocket.fr/app/fftt/clubs/{club_id}/equipes/calendriers?phase="
+
         all_matches = []
         all_simples = []
         all_doubles = []
