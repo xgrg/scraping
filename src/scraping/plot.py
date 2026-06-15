@@ -46,9 +46,6 @@ def plot_player_participations_by_phase(df, save_path=None):
     _save_or_show(fig, save_path)
 
 
-# plot_player_participations_by_phase(simples_df, save_path="output/participations.jpg")
-
-
 def plot_home_away_performance(df_result, top_n=None, save_path=None):
     """Plot home vs away win rates for players.
 
@@ -87,9 +84,6 @@ def plot_home_away_performance(df_result, top_n=None, save_path=None):
     _save_or_show(fig, save_path)
 
 
-# plot_home_away_performance(analyze_home_away_performance(simples_df), save_path="output/home_away.jpg")
-
-
 def plot_team_series(df, save_path=None):
     """Plot team ranking progression across phases and matches.
 
@@ -99,6 +93,11 @@ def plot_team_series(df, save_path=None):
                    If None, the figure is displayed interactively.
     """
     df = df.copy()
+    team_div = (
+        df.groupby("team_id")["division"]
+        .agg(lambda x: x.dropna().iloc[0] if not x.dropna().empty else "")
+        .to_dict()
+    )
 
     def get_result(row):
         if row["score_home"] > row["score_opponent"]:
@@ -116,30 +115,32 @@ def plot_team_series(df, save_path=None):
     ncols = 2  # phase 1 / phase 2
 
     fig, axes = plt.subplots(
-        nrows=nrows, ncols=ncols, figsize=(18, 4 * nrows), sharex=False, sharey=False
+        nrows=nrows,
+        ncols=ncols,
+        figsize=(18, 4 * nrows),
+        sharex=False,
+        sharey=False,
+        squeeze=False,
     )
-    fig.suptitle("Team ranking evolution", fontsize=16)
 
-    # If there is only one team, ensure axes remains iterable
-    if nrows == 1:
-        axes = [axes]
+    fig.suptitle("Team ranking evolution", fontsize=16)
 
     for row_idx, team in enumerate(teams):
         dft = df[df["team_id"] == team].sort_values(["idx_phase", "idx_match"])
 
         for col_idx, phase in enumerate([1, 2]):
-            ax = axes[row_idx][col_idx] if nrows > 1 else axes[col_idx]
+            ax = axes[row_idx, col_idx]
 
             dfp = dft[dft["idx_phase"] == phase]
 
-            ax.set_title(f"Team {team} - Phase {phase}")
+            ax.set_title(f"{format_label(team, team_div)} — Phase {phase}")
 
             if dfp.empty:
-                ax.text(0.5, 0.5, "No matches", ha="center")
+                ax.text(0.5, 0.5, "No matches", ha="center", va="center")
                 ax.axis("off")
                 continue
 
-            x = list(range(len(dfp)))
+            x = dfp["idx_match"].tolist()
 
             labels = [
                 f"{opp} ({'H' if home else 'A'})"
@@ -151,7 +152,7 @@ def plot_team_series(df, save_path=None):
             ax.plot(x, dfp["ranking_opponent"], color="red", label="Opponent")
 
             # Home team markers
-            for i, row in enumerate(dfp.itertuples()):
+            for i, row in zip(x, dfp.itertuples()):
                 if row.score_home > row.score_opponent:
                     marker = "*"
                     size = 240
@@ -163,15 +164,10 @@ def plot_team_series(df, save_path=None):
                     size = 90
 
                 ax.scatter(
-                    i,
-                    row.ranking_home,
-                    marker=marker,
-                    color="green",
-                    s=size,
-                    zorder=3,
+                    i, row.ranking_home, marker=marker, color="green", s=size, zorder=3
                 )
 
-            # Opponent markers (discrete circles)
+            # Opponent markers
             ax.scatter(
                 x,
                 dfp["ranking_opponent"],
@@ -187,10 +183,12 @@ def plot_team_series(df, save_path=None):
             if row_idx == 0 and col_idx == 0:
                 ax.legend()
 
-            for i, label in enumerate(labels):
+            ymin, ymax = ax.get_ylim()
+
+            for i, label in zip(x, labels):
                 ax.text(
                     i,
-                    ax.get_ylim()[0] + (ax.get_ylim()[1] - ax.get_ylim()[0]) * 0.02,
+                    ymin + (ymax - ymin) * 0.02,
                     label,
                     rotation=90,
                     ha="center",
@@ -199,16 +197,20 @@ def plot_team_series(df, save_path=None):
                     alpha=0.8,
                     color="gray",
                 )
-            labels = [f"P{phase}-J{idx + 1}" for idx, _ in enumerate(dfp.itertuples())]
-            ax.set_xticks(range(len(dfp)))
-            ax.set_xticklabels(labels)
+
+            max_match = dfp["idx_match"].max()
+            all_ticks = list(range(1, max_match + 1))
+            ax.set_xticks(all_ticks)
+            ax.set_xticklabels([f"P{phase}-J{j}" for j in all_ticks])
 
     plt.tight_layout(rect=[0, 0, 1, 0.97])
 
     _save_or_show(fig, save_path)
 
 
-# plot_team_series(matches_df, save_path="output/series.jpg")
+def format_label(t, team_div):
+    div = team_div.get(t)
+    return f"Team {t}" if not div else f"Team {t} — {div}"
 
 
 def plot_team_match_matrix(df, save_path=None):
@@ -220,6 +222,12 @@ def plot_team_match_matrix(df, save_path=None):
                    If None, the figure is displayed interactively.
     """
     df = df.copy()
+
+    team_div = (
+        df.groupby("team_id")["division"]
+        .agg(lambda x: x.dropna().iloc[0] if not x.dropna().empty else "")
+        .to_dict()
+    )
 
     # match key
     df["match_key"] = (
@@ -250,15 +258,16 @@ def plot_team_match_matrix(df, save_path=None):
     teams = sorted(df["team_id"].unique())
     n_teams = len(teams)
 
-    fig, ax = plt.subplots(figsize=(max(12, n_matches), 1.2 * n_teams))
+    fig_height = 1 + 1.2 * n_teams
 
+    fig, ax = plt.subplots(figsize=(max(12, n_matches), fig_height))
     ax.set_xlim(-0.5, n_matches - 0.5)
     ax.set_ylim(-0.5, n_teams - 0.5)
 
     ax.invert_yaxis()
 
     ax.set_yticks(range(n_teams))
-    ax.set_yticklabels([f"Team {t}" for t in teams])
+    ax.set_yticklabels([format_label(t, team_div) for t in teams])
 
     ax.set_xticks(range(n_matches))
     ax.set_xticklabels(match_keys, rotation=90)
@@ -337,6 +346,3 @@ def plot_team_match_matrix(df, save_path=None):
     plt.tight_layout()
 
     _save_or_show(fig, save_path)
-
-
-# plot_team_match_matrix(matches_df, save_path="output/match_matrix.jpg")

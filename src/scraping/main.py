@@ -19,7 +19,6 @@ from scraping.plot import (
     plot_team_series,
 )
 from scraping.report import build_excel_report
-from loguru import logger
 
 app = FastAPI(title="TT Stats API")
 
@@ -99,17 +98,17 @@ def analyze(req: AnalyzeRequest):
         p_series = tmp / "series.jpg"
         p_matrix = tmp / "matrix.jpg"
 
-        try:
-            home_away_df = analyze_home_away_performance(simples_df)
-            plot_home_away_performance(home_away_df, save_path=p_home_away)
-            plot_player_participations_by_phase(simples_df, save_path=p_participations)
-            plot_team_series(matches_df, save_path=p_series)
-            plot_team_match_matrix(matches_df, save_path=p_matrix)
-        except Exception as e:
-            logger.error(e)
-            raise HTTPException(
-                status_code=500, detail=f"Erreur génération plots : {e}"
-            )
+        # try:
+        home_away_df = analyze_home_away_performance(simples_df)
+        plot_home_away_performance(home_away_df, save_path=p_home_away)
+        plot_player_participations_by_phase(simples_df, save_path=p_participations)
+        plot_team_series(matches_df, save_path=p_series)
+        plot_team_match_matrix(matches_df, save_path=p_matrix)
+        # except Exception as e:
+        #     logger.error(e)
+        #     raise HTTPException(
+        #         status_code=500, detail=f"Erreur génération plots : {e}"
+        #     )
 
         # --- Excel (persisté dans outputs/ pour être téléchargeable) ---
         safe_name = club_name.lower().replace(" ", "_")[:40]

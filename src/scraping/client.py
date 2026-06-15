@@ -158,7 +158,7 @@ class FFTTClient:
         """Fetch a URL with caching enabled for a club-specific key."""
         html_text = self._cached_html(club_id, url)
         if html_text is not None:
-            logger.debug("Using cached HTML for club %s: %s", club_id, url)
+            logger.debug(f"Using cached HTML for club {club_id}: {url}")
             return BeautifulSoup(html_text, "html.parser")
 
         if self.sleep:
@@ -175,21 +175,34 @@ class FFTTClient:
     # =========================================================
     # BUILD MATCH INDEX (per phase)
     # =========================================================
-    def _build_matches(self, soup, club_id=None):
-        """Build a map of all teams to their match page URLs for one phase."""
+    def _build_matches(self, soup, club_id):
+        """Build a map of all teams to their match page URLs for one phase.
+
+        soup is the BeautifulSoup document of the phase page.
+        """
         matches = {}
 
         for pool in soup.select("ul.rounded.pool-ranking"):
-            team_link = pool.select_one("a.item-container p")
-            if not team_link:
+            if not pool.select_one("i.fa.fa-male"):
+                logger.warning(f"Skipping pool without fa-male icon: {pool}")
                 continue
 
-            team_name = team_link.get_text(strip=True)
+            team_label = pool.select_one("div.labels p")
+            if not team_label:
+                logger.warning(f"Skipping pool without team label: {pool}")
+                continue
 
-            matches[team_name] = [
-                self._fetch_cached("http://pingpocket.fr" + a["href"], club_id)
-                for a in pool.select("li.score.arrow > a[href]")
-            ]
+            team_name = team_label.get_text(strip=True)
+
+            matches[team_name] = []
+            for li in pool.select("li.score"):
+                a = li.select_one("a[href]") if "arrow" in li.get("class", []) else None
+                if a is not None:
+                    matches[team_name].append(
+                        self._fetch_cached("http://pingpocket.fr" + a["href"], club_id)
+                    )
+                else:
+                    matches[team_name].append(None)
 
         return matches
 
@@ -204,6 +217,15 @@ class FFTTClient:
         scores = soup.select_one("ul.divisionIndividualRoundMatchesPanel > li").select(
             "p.rich-button"
         )
+
+        def _extract_team_id(team_name: str) -> int:
+            """
+            Extract numeric team id from team names
+            """
+            match = re.search(r"(\d+)\s*$|\((\d+)\)\s*$", team_name)
+            if match:
+                return int(match.group(1) or match.group(2))
+            raise ValueError(f"Cannot extract team_id from team_name: {team_name}")
 
         def safe_int(x):
             txt = x.get_text(strip=True)
@@ -230,8 +252,14 @@ class FFTTClient:
         score_opponent = score_right if home_is_left else score_left
         opponent_name = team_right if home_is_left else team_left
 
-        team_id = re.search(r"\(?\s*(\d+)\s*\)?", team_name)
-        team_id = int(team_id.group(1)) if team_id else None
+        team_id = _extract_team_id(team_name)
+
+        data_title = soup.select_one("div.daymatchdetails").get("data-title", "")
+        parts = [p.strip() for p in data_title.split(",")]
+        division = None
+
+        if len(parts) > 3:
+            division = parts[3]
 
         # ==========================================================
         # Team composition
@@ -309,7 +337,6 @@ class FFTTClient:
         # ==========================================================
         # Match sheet
         # ==========================================================
-
         panel = soup.select("ul.divisionIndividualRoundMatchesPanel")[1]
 
         simples = []
@@ -334,7 +361,17 @@ class FFTTClient:
                 li.select_one("span.pos.right, a.labels-fragment.right span.pos")
             )
 
-            is_double = " et " in left_name and " et " in right_name
+            if left_name == "Joueur absent" or right_name == "Joueur absent":
+                logger.warning(
+                    f"Skipping match with absent player: {left_name} vs {right_name}"
+                )
+                continue
+            if left_name == " " or right_name == " ":
+                logger.warning(
+                    f"Skipping match with absent player: {left_name} vs {right_name}"
+                )
+                continue
+            is_double = " et " in left_name or " et " in right_name
 
             if is_double:
                 winner_side = None
@@ -369,7 +406,6 @@ class FFTTClient:
                 opponent_info = opponent_players.get(
                     player_opponent, {"position": None, "ranking": np.nan}
                 )
-
                 simples.append(
                     {
                         "player_home": player_home,
@@ -427,6 +463,7 @@ class FFTTClient:
             "idx_match": idx_match,
             "idx_phase": idx_phase,
             "at_home": home_is_left,
+            "division": division,
         }
 
         return match, simples, doubles
@@ -492,12 +529,22 @@ class FFTTClient:
         for idx_phase in phases:
             for team_name, team_matches in self.matches[idx_phase - 1].items():
                 for idx_match, html in enumerate(team_matches, start=1):
-                    match, simples, doubles = self._parse_match(
-                        html, team_name, idx_match, idx_phase
-                    )
-                    all_matches.append(match)
-                    all_simples.extend(simples)
-                    all_doubles.extend(doubles)
+                    if html is None:
+                        logger.info(
+                            f"Skipping match {idx_match} for team {team_name} (no link)."
+                        )
+                        continue
+                    try:
+                        match, simples, doubles = self._parse_match(
+                            html, team_name, idx_match, idx_phase
+                        )
+                        all_matches.append(match)
+                        all_simples.extend(simples)
+                        all_doubles.extend(doubles)
+                    except Exception:
+                        logger.error(
+                            f"Parsing match {idx_match} for team {team_name} in phase {idx_phase} resulted in error."
+                        )
 
         return (
             pd.DataFrame(all_matches),
