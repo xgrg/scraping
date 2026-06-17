@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from scraping.client import FFTTClient
+from scraping.social import generate_poster, filter_by_match_day
 from scraping.stats import analyze_home_away_performance
 from scraping.plot import (
     plot_home_away_performance,
@@ -24,7 +25,7 @@ app = FastAPI(title="TT Stats API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restreindre en prod
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -57,31 +58,34 @@ class AnalyzeRequest(BaseModel):
     club_id: str
 
 
+class SocialRequest(BaseModel):
+    club_id: str
+    phase_index: int
+    match_index: int
+
+
 def _fig_to_base64(path: Path) -> str:
-    """Lit un fichier image et le renvoie en base64."""
+    """Reads a file and returns it encoded in base64."""
     with open(path, "rb") as f:
         return base64.b64encode(f.read()).decode()
 
 
 @app.get("/clubs")
 def list_clubs():
-    """Retourne la liste des clubs disponibles."""
+    """Returns the list of available clubs."""
     return [{"id": cid, "name": name} for cid, name in CLUBS.items()]
 
 
 @app.post("/analyze")
 def analyze(req: AnalyzeRequest):
     """
-    Collecte les données du club, génère les plots et le rapport Excel.
+    Fetches the data for a club, generates plots and an Excel report.
 
-    Retourne :
-    - 4 images encodées en base64 (JPG)
-    - l'URL du fichier Excel téléchargeable
+    Returns:
+    - 4 images encoded in base64 (JPG)
+    - the URL of the downloadable Excel file
     """
     club_id = req.club_id
-    if club_id not in CLUBS:
-        raise HTTPException(status_code=404, detail=f"Club inconnu : {club_id}")
-
     club_name = CLUBS[club_id]
 
     try:
@@ -97,20 +101,23 @@ def analyze(req: AnalyzeRequest):
         p_participations = tmp / "participations.jpg"
         p_series = tmp / "series.jpg"
         p_matrix = tmp / "matrix.jpg"
+        if len(simples_df) == 0:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pas de matches enregistrés pour le club : {club_name}",
+            )
+        try:
+            home_away_df = analyze_home_away_performance(simples_df)
+            plot_home_away_performance(home_away_df, save_path=p_home_away)
+            plot_player_participations_by_phase(simples_df, save_path=p_participations)
+            plot_team_series(matches_df, save_path=p_series)
+            plot_team_match_matrix(matches_df, save_path=p_matrix)
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, detail=f"Erreur génération plots : {e}"
+            )
 
-        # try:
-        home_away_df = analyze_home_away_performance(simples_df)
-        plot_home_away_performance(home_away_df, save_path=p_home_away)
-        plot_player_participations_by_phase(simples_df, save_path=p_participations)
-        plot_team_series(matches_df, save_path=p_series)
-        plot_team_match_matrix(matches_df, save_path=p_matrix)
-        # except Exception as e:
-        #     logger.error(e)
-        #     raise HTTPException(
-        #         status_code=500, detail=f"Erreur génération plots : {e}"
-        #     )
-
-        # --- Excel (persisté dans outputs/ pour être téléchargeable) ---
+        # --- Excel (stored in outputs/ for download) ---
         safe_name = club_name.lower().replace(" ", "_")[:40]
         excel_path = OUTPUT_DIR / f"{safe_name}.xlsx"
 
@@ -123,7 +130,7 @@ def analyze(req: AnalyzeRequest):
                 status_code=500, detail=f"Erreur génération Excel : {e}"
             )
 
-        # --- Encodage base64 des images ---
+        # --- base64 encoding of images ---
         return {
             "club_id": club_id,
             "club_name": club_name,
@@ -137,7 +144,7 @@ def analyze(req: AnalyzeRequest):
 
 @app.get("/files/{filename}")
 def download_excel(filename: str):
-    """Téléchargement direct du fichier Excel."""
+    """Direct download of the Excel file."""
     path = OUTPUT_DIR / filename
     if not path.exists() or path.suffix != ".xlsx":
         raise HTTPException(status_code=404, detail="Fichier introuvable")
@@ -146,3 +153,37 @@ def download_excel(filename: str):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=filename,
     )
+
+
+@app.post("/social/")
+def generate_social_poster(req: SocialRequest):
+    """Generate a social media poster for a specific match."""
+
+    club_id = req.club_id
+    club_name = CLUBS[club_id]
+
+    try:
+        client = FFTTClient(config_path=None)
+        matches_df, simples_df, doubles_df = client.scrape_club(club_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erreur API fédération : {e}")
+    # try:
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        day_matchs = filter_by_match_day(matches_df, req.match_index, req.phase_index)
+        generate_poster(
+            matchs=day_matchs,
+            match_index=req.match_index,
+            phase_index=req.phase_index,
+            output=tmp / "poster.svg",
+            export_png=True,
+        )
+        return {
+            "club_id": club_id,
+            "club_name": club_name,
+            "plot_social": _fig_to_base64(tmp / "poster.png"),
+        }
+
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=f"Erreur génération poster social : {e}")

@@ -455,6 +455,7 @@ class FFTTClient:
 
         match = {
             "team_id": team_id,
+            "team_name": team_name,
             "opponent_name": opponent_name,
             "score_home": score_home,
             "score_opponent": score_opponent,

@@ -4,6 +4,238 @@ import pandas as pd
 import numpy as np
 
 
+def compute_home_away_record(
+    singles_df: pd.DataFrame,
+    doubles_df: pd.DataFrame,
+    by_phase: bool = True,
+) -> tuple[dict, pd.DataFrame]:
+    """
+    Compute home/away performance records for the club.
+
+    Singles and doubles are combined together. Each row in the input
+    DataFrames is considered as one match.
+
+    Parameters
+    ----------
+    singles_df : pd.DataFrame
+        Singles matches. Must contain:
+        - wins (bool)
+        - at_home (bool)
+        - team_id
+        - idx_phase (if by_phase=True)
+
+    doubles_df : pd.DataFrame
+        Doubles matches. Must contain:
+        - wins (bool)
+        - at_home (bool)
+        - team_id
+        - idx_phase (if by_phase=True)
+
+    by_phase : bool, default=True
+        If True, statistics are stratified by (team_id, idx_phase).
+        Otherwise, they are computed only by team_id.
+
+    Returns
+    -------
+    tuple
+        (
+            global_stats: dict,
+            team_stats: pd.DataFrame,
+        )
+
+    global_stats : dict
+        {
+            "home": {
+                "wins": int,
+                "losses": int,
+                "total": int,
+                "win_rate": float,
+            },
+            "away": {
+                "wins": int,
+                "losses": int,
+                "total": int,
+                "win_rate": float,
+            },
+        }
+
+    team_stats : pd.DataFrame
+        Index:
+            - (team_id,) if by_phase=False
+            - (team_id, idx_phase) if by_phase=True
+
+        Columns:
+            home_wins
+            home_losses
+            home_total
+            home_win_rate
+            away_wins
+            away_losses
+            away_total
+            away_win_rate
+    """
+    # Keep only the required columns and combine singles + doubles
+    required_cols = ["wins", "at_home", "team_id", "idx_phase"]
+
+    matches = pd.concat(
+        [
+            singles_df[required_cols],
+            doubles_df[required_cols],
+        ],
+        ignore_index=True,
+    )
+
+    #
+    # Global statistics
+    #
+    global_stats = {}
+
+    for location, label in [(True, "home"), (False, "away")]:
+        subset = matches[matches["at_home"] == location]
+
+        wins = int(subset["wins"].sum())
+        total = len(subset)
+        losses = total - wins
+
+        global_stats[label] = {
+            "wins": wins,
+            "losses": losses,
+            "total": total,
+            "win_rate": wins / total if total > 0 else 0.0,
+        }
+
+    #
+    # Team statistics
+    #
+    group_cols = ["team_id"]
+    if by_phase:
+        group_cols.append("idx_phase")
+
+    team_stats = (
+        matches.groupby(group_cols + ["at_home"])["wins"]
+        .agg(
+            wins="sum",
+            total="count",
+        )
+        .assign(
+            losses=lambda x: x["total"] - x["wins"],
+            win_rate=lambda x: x["wins"] / x["total"],
+        )
+        .reset_index()
+    )
+
+    # Pivot home / away into columns
+    team_stats = team_stats.pivot(
+        index=group_cols,
+        columns="at_home",
+        values=["wins", "losses", "total", "win_rate"],
+    ).fillna(0)
+
+    # Rename columns
+    team_stats.columns = [
+        f"{'home' if at_home else 'away'}_{metric}"
+        for metric, at_home in team_stats.columns
+    ]
+
+    # Ensure consistent column order
+    expected_columns = [
+        "home_wins",
+        "home_losses",
+        "home_total",
+        "home_win_rate",
+        "away_wins",
+        "away_losses",
+        "away_total",
+        "away_win_rate",
+    ]
+
+    for col in expected_columns:
+        if col not in team_stats.columns:
+            team_stats[col] = 0
+
+    team_stats = team_stats[expected_columns]
+
+    # Convert counts to integers
+    count_columns = [
+        "home_wins",
+        "home_losses",
+        "home_total",
+        "away_wins",
+        "away_losses",
+        "away_total",
+    ]
+
+    team_stats[count_columns] = team_stats[count_columns].astype(int)
+
+    team_stats = team_stats.sort_index()
+
+    return global_stats, team_stats
+
+
+def compute_doubles_record(
+    df: pd.DataFrame, by_phase: bool = False
+) -> tuple[dict, pd.DataFrame]:
+    """
+    Compute the doubles record for the club.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        - wins (bool)
+        - team_id
+
+    Returns
+    -------
+    tuple
+        (
+            global_stats: dict,
+            team_stats: pd.DataFrame
+        )
+
+    global_stats :
+        {
+            "wins": int,
+            "losses": int,
+            "total": int,
+            "win_rate": float,
+        }
+
+    team_stats :
+        DataFrame indexed by team_id with columns:
+        wins, losses, total, win_rate
+    """
+    n_wins = int(df["wins"].sum())
+    n_total = len(df)
+    n_losses = n_total - n_wins
+
+    global_stats = {
+        "wins": n_wins,
+        "losses": n_losses,
+        "total": n_total,
+        "win_rate": n_wins / n_total if n_total > 0 else 0.0,
+    }
+
+    group_cols = ["team_id"]
+    if by_phase:
+        group_cols.append("idx_phase")
+
+    team_stats = (
+        df.groupby(group_cols)["wins"]
+        .agg(
+            wins="sum",
+            total="count",
+        )
+        .assign(
+            losses=lambda x: x["total"] - x["wins"],
+            win_rate=lambda x: x["wins"] / x["total"],
+        )[["wins", "losses", "total", "win_rate"]]
+        .astype({"wins": int, "losses": int, "total": int})
+        .sort_index()
+    )
+
+    return global_stats, team_stats
+
+
 def build_pair_stats(df):
     """Build statistics for home team doubles pairs.
 
@@ -33,9 +265,6 @@ def build_pair_stats(df):
     out["win_pct"] = (out["n_won"] / out["n_played_matches"] * 100).round(1)
 
     return out.reset_index()
-
-
-# stats = build_pair_stats(doubles_df).sort_values(['n_played_matches','win_pct'], ascending=[False, False])
 
 
 def build_individual_stats(df):
@@ -80,9 +309,6 @@ def compute_perfs(df: pd.DataFrame):
     return best_perfs, worst_perfs
 
 
-# compute_perfs(simples_df)[0].sort_values("rank_gap")
-
-
 def analyze_home_away_performance(df):
     """Analyze home/away win rates for individual home team players."""
     df = df.copy()
@@ -117,6 +343,3 @@ def analyze_home_away_performance(df):
     result["diff_home_away"] = result["home_win_rate"] - result["away_win_rate"]
 
     return result.sort_values("diff_home_away", ascending=False)
-
-
-# analyze_home_away_performance(simples_df)

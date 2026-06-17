@@ -42,6 +42,7 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [result,   setResult]   = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [lightbox, setLightbox] = useState(null);
 
   async function handleLaunch() {
     if (!clubId) return;
@@ -91,6 +92,17 @@ export default function App() {
     setProgress(0);
     setStep(0);
   }
+
+  const Lightbox = () => (
+    <div onClick={() => setLightbox(null)} style={{
+      position: "fixed", inset: 0, zIndex: 999,
+      background: "rgba(0,0,0,0.85)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "1rem",
+    }}>
+      <img src={lightbox} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+    </div>
+  );
 
   return (
     <div style={s.page}>
@@ -182,7 +194,8 @@ export default function App() {
                     <img
                       src={`data:image/jpeg;base64,${result[key]}`}
                       alt={label}
-                      style={s.plotImg}
+                      style={{ ...s.plotImg, cursor: "zoom-in" }}
+                      onClick={() => setLightbox(`data:image/jpeg;base64,${result[key]}`)}
                     />
                   ) : (
                     <div style={s.plotEmpty}>Aucune donnée</div>
@@ -198,6 +211,7 @@ export default function App() {
         )}
 
       </div>
+      {lightbox && <Lightbox />}
     </div>
   );
 }
