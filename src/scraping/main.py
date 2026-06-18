@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import json
+from loguru import logger
 from fastapi import Request
 from scraping.client import FFTTClient
 from scraping.social import generate_poster, filter_by_match_day
@@ -79,6 +80,21 @@ if CLUBS_FILE.exists():
 else:
     CLUBS = {}
 
+
+# Create a flat lookup for club_id -> (department_id, club_name)
+def _build_club_lookup():
+    """Build a flat lookup from club_id to (dept_id, club_name)."""
+    lookup = {}
+    if isinstance(CLUBS, dict):
+        for dept_id, clubs_in_dept in CLUBS.items():
+            if isinstance(clubs_in_dept, dict):
+                for club_id, club_name in clubs_in_dept.items():
+                    lookup[club_id] = (dept_id, club_name)
+    return lookup
+
+
+CLUB_LOOKUP = _build_club_lookup()
+
 OUTPUT_DIR = Path("outputs")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -103,8 +119,8 @@ def _fig_to_base64(path: Path) -> str:
 
 @app.get("/clubs")
 def list_clubs():
-    """Returns the list of available clubs."""
-    return [{"id": cid, "name": name} for cid, name in CLUBS.items()]
+    """Returns the list of available clubs organized by department."""
+    return CLUBS
 
 
 @app.post("/analyze")
@@ -117,11 +133,17 @@ def analyze(req: AnalyzeRequest):
     - the URL of the downloadable Excel file
     """
     club_id = req.club_id
-    club_name = CLUBS[club_id]
+
+    # Look up club name from the flat lookup
+    if club_id not in CLUB_LOOKUP:
+        raise HTTPException(status_code=404, detail=f"Club introuvable : {club_id}")
+
+    dept_id, club_name = CLUB_LOOKUP[club_id]
 
     try:
         client = FFTTClient(config_path=None)
         matches_df, simples_df, doubles_df = client.scrape_club(club_id)
+        logger.critical(matches_df["division"].unique())
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur API fédération : {e}")
 
@@ -191,15 +213,21 @@ def generate_social_poster(req: SocialRequest):
     """Generate a social media poster for a specific match."""
 
     club_id = req.club_id
-    club_name = CLUBS[club_id]
 
-    try:
-        client = FFTTClient(config_path=None)
-        matches_df, simples_df, doubles_df = client.scrape_club(club_id)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erreur API fédération : {e}")
+    # Look up club name from the flat lookup
+    if club_id not in CLUB_LOOKUP:
+        raise HTTPException(status_code=404, detail=f"Club introuvable : {club_id}")
+
+    _, club_name = CLUB_LOOKUP[club_id]
+
     # try:
+    client = FFTTClient(config_path=None)
+    matches_df, _, _ = client.scrape_club(club_id, phases=[req.phase_index])
+    logger.critical(matches_df["division"].unique())
+    # except Exception as e:
+    #    raise HTTPException(status_code=502, detail=f"Erreur API fédération : {e}")
 
+    # try:
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         day_matchs = filter_by_match_day(matches_df, req.match_index, req.phase_index)

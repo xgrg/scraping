@@ -8,8 +8,8 @@ export default defineConfig({
     allowedHosts: ["ttstats.duckdns.org"],
     proxy: {
       "/analyze": "http://localhost:8000",
-      "/files":   "http://localhost:8000",
-      "/clubs":   "http://localhost:8000",
+      "/files": "http://localhost:8000",
+      "/clubs": "http://localhost:8000",
     },
   },
 });

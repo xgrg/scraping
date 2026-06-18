@@ -3,6 +3,68 @@ from PIL import ImageFont
 import svgwrite
 from loguru import logger
 
+import re
+
+
+def normalize_cat(x):
+    if pd.isna(x):
+        return x
+
+    s = str(x).upper()
+    s = s.split("_")[-1]
+    s = s.split("-")[-1]
+
+    # Remove accents and non-alphanumeric characters
+    s = (
+        s.replace("É", "E")
+        .replace("È", "E")
+        .replace("Ê", "E")
+        .replace("À", "A")
+        .replace("Ç", "C")
+    )
+    s = re.sub(r"[^A-Z0-9]", "", s)
+
+    # Special categories
+    if "PR" in s or "PREREGION" in s or "PREEGION" in s:
+        return "PR"
+
+    if "PN" in s or "PRENATION" in s:
+        return "PN"
+
+    # Canonical forms already present
+    m = re.search(r"\b([NRD])([1-9])\b", s)
+    if m:
+        return f"{m.group(1)}{m.group(2)}"
+
+    # Verbose forms
+    patterns = {
+        "N": r"NAT",
+        "R": r"REG",
+        "D": r"DEP",
+    }
+
+    # last resort: check tail only
+    tail = s[-2:]  # enough for PR / PN / N1 / R9 / D3
+
+    if re.fullmatch(r"(PR|PN)", tail):
+        return tail
+
+    m = re.fullmatch(r"([NRD][1-9])", tail)
+    if m:
+        return m.group(1)
+
+    for letter, pattern in patterns.items():
+        m = re.search(pattern + r".*?([1-9])", s)
+        if m:
+            return f"{letter}{m.group(1)}"
+
+        # structured match anywhere in string
+    m = re.search(r"([NRD])([1-9])", s)
+    if m:
+        return f"{m.group(1)}{m.group(2)}"
+
+    return ""
+
 
 def filter_by_match_day(df, match_index, phase_index):
     """
@@ -30,11 +92,8 @@ def filter_by_match_day(df, match_index, phase_index):
             pd.to_numeric(output_df[col], errors="coerce").round().astype("Int64")
         )
 
-    # Remove prefixes such as "L11_"
-    output_df["cat"] = output_df["cat"].apply(lambda x: str(x).split("_")[-1])
-    output_df["cat"] = output_df["cat"].apply(
-        lambda x: str(x).replace("Nationale ", "N")
-    )
+    # Normalize category strings
+    output_df["cat"] = output_df["cat"].apply(normalize_cat)
 
     return output_df
 

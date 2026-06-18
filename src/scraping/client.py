@@ -184,12 +184,12 @@ class FFTTClient:
 
         for pool in soup.select("ul.rounded.pool-ranking"):
             if not pool.select_one("i.fa.fa-male"):
-                logger.warning(f"Skipping pool without fa-male icon: {pool}")
+                logger.warning("Skipping pool without fa-male icon.")
                 continue
 
             team_label = pool.select_one("div.labels p")
             if not team_label:
-                logger.warning(f"Skipping pool without team label: {pool}")
+                logger.warning("Skipping pool without team label.")
                 continue
 
             team_name = team_label.get_text(strip=True)
@@ -519,16 +519,16 @@ class FFTTClient:
         all_doubles = []
 
         if self.matches is None:
-            self.matches = []
+            self.matches = {}
             for idx_phase in phases:
                 url = f"{base_url}{idx_phase}"
                 logger.info(f"Scraping phase {idx_phase}: {url}")
 
                 soup = self._fetch_cached(url, club_id)
-                self.matches.append(self._build_matches(soup, club_id))
+                self.matches[idx_phase] = self._build_matches(soup, club_id)
 
         for idx_phase in phases:
-            for team_name, team_matches in self.matches[idx_phase - 1].items():
+            for team_name, team_matches in self.matches[idx_phase].items():
                 for idx_match, html in enumerate(team_matches, start=1):
                     if html is None:
                         logger.info(

@@ -1,31 +1,58 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import CLUBS from "./clubs.json";
+import DEPS from "./deps.json";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 const LOADING_STEPS = [
   { label: "Connexion à l'API fédération...", pct: 10 },
-  { label: "Récupération des matchs...",      pct: 35 },
-  { label: "Calcul des statistiques...",      pct: 60 },
-  { label: "Génération des graphiques...",    pct: 80 },
+  { label: "Récupération des matchs...", pct: 35 },
+  { label: "Calcul des statistiques...", pct: 60 },
+  { label: "Génération des graphiques...", pct: 80 },
   { label: "Préparation du fichier Excel...", pct: 95 },
 ];
 
 const PLOTS = [
-  { key: "plot_home_away",      label: "Domicile / Extérieur" },
+  { key: "plot_home_away", label: "Domicile / Extérieur" },
   { key: "plot_participations", label: "Participations par phase" },
-  { key: "plot_series",         label: "Séries" },
-  { key: "plot_matrix",         label: "Matrice des matchs" },
+  { key: "plot_series", label: "Séries" },
+  { key: "plot_matrix", label: "Matrice des matchs" },
 ];
 
 export default function App() {
-  const [clubId,   setClubId]   = useState("");
-  const [status,   setStatus]   = useState("idle"); // idle | loading | done | error
-  const [step,     setStep]     = useState(0);
+  const [departmentId, setDepartmentId] = useState("");
+  const [clubId, setClubId] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | loading | done | error
+  const [step, setStep] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [result,   setResult]   = useState(null);
+  const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [lightbox, setLightbox] = useState(null);
+
+  // Load department and club from URL parameters on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dParam = params.get("d");
+    const cParam = params.get("c");
+    if (dParam) setDepartmentId(dParam);
+    if (cParam) setClubId(cParam);
+  }, []);
+
+  // Update URL when department or club changes
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (departmentId) params.set("d", departmentId);
+    if (clubId) params.set("c", clubId);
+    const newUrl = params.toString()
+      ? `${window.location.pathname}?${params}`
+      : window.location.pathname;
+    window.history.replaceState({}, "", newUrl);
+  }, [departmentId, clubId]);
+
+  // Reset club selection when department changes
+  useEffect(() => {
+    setClubId("");
+  }, [departmentId]);
 
   async function handleLaunch() {
     if (!clubId) return;
@@ -69,6 +96,7 @@ export default function App() {
 
   function handleReset() {
     setStatus("idle");
+    setDepartmentId("");
     setClubId("");
     setResult(null);
     setErrorMsg("");
@@ -77,20 +105,29 @@ export default function App() {
   }
 
   const Lightbox = () => (
-    <div onClick={() => setLightbox(null)} style={{
-      position: "fixed", inset: 0, zIndex: 999,
-      background: "rgba(0,0,0,0.85)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "1rem",
-    }}>
-      <img src={lightbox} style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }} />
+    <div
+      onClick={() => setLightbox(null)}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 999,
+        background: "rgba(0,0,0,0.85)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "1rem",
+      }}
+    >
+      <img
+        src={lightbox}
+        style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 8 }}
+      />
     </div>
   );
 
   return (
     <div style={s.page}>
       <div style={s.app}>
-
         {/* ── Header ── */}
         <header style={s.header}>
           <div style={s.logoLine}>
@@ -105,18 +142,53 @@ export default function App() {
         {/* ── Sélecteur ── */}
         {status === "idle" && (
           <div style={s.card}>
-            <label style={s.label} htmlFor="club-select">Club</label>
+            {/* Département Selector */}
+            <label style={s.label} htmlFor="dept-select">
+              Département
+            </label>
+            <div style={s.selectWrap}>
+              <select
+                id="dept-select"
+                style={s.select}
+                value={departmentId}
+                onChange={(e) => setDepartmentId(e.target.value)}
+              >
+                <option value="">— Choisir un département —</option>
+                {DEPS.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <span style={s.selectArrow} aria-hidden="true" />
+            </div>
+
+            {/* Club Selector */}
+            <label
+              style={{ ...s.label, marginTop: "1rem" }}
+              htmlFor="club-select"
+            >
+              Club
+            </label>
             <div style={s.selectWrap}>
               <select
                 id="club-select"
-                style={s.select}
+                style={{
+                  ...s.select,
+                  ...(departmentId ? {} : s.selectDisabled),
+                }}
                 value={clubId}
                 onChange={(e) => setClubId(e.target.value)}
+                disabled={!departmentId}
               >
                 <option value="">— Choisir un club —</option>
-                {Object.entries(CLUBS).map(([id, name]) => (
-                  <option key={id} value={id}>{name}</option>
-                ))}
+                {departmentId &&
+                  CLUBS[departmentId] &&
+                  Object.entries(CLUBS[departmentId]).map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
               </select>
               <span style={s.selectArrow} aria-hidden="true" />
             </div>
@@ -148,7 +220,9 @@ export default function App() {
             <p style={{ color: "#ff6b6b", marginBottom: "1rem" }}>
               ⚠️ {errorMsg}
             </p>
-            <button style={s.resetBtn} onClick={handleReset}>Réessayer</button>
+            <button style={s.resetBtn} onClick={handleReset}>
+              Réessayer
+            </button>
           </div>
         )}
 
@@ -178,7 +252,9 @@ export default function App() {
                       src={`data:image/jpeg;base64,${result[key]}`}
                       alt={label}
                       style={{ ...s.plotImg, cursor: "zoom-in" }}
-                      onClick={() => setLightbox(`data:image/jpeg;base64,${result[key]}`)}
+                      onClick={() =>
+                        setLightbox(`data:image/jpeg;base64,${result[key]}`)
+                      }
                     />
                   ) : (
                     <div style={s.plotEmpty}>Aucune donnée</div>
@@ -192,7 +268,6 @@ export default function App() {
             </button>
           </div>
         )}
-
       </div>
       {lightbox && <Lightbox />}
     </div>
@@ -215,17 +290,25 @@ const s = {
   header: { marginBottom: "2rem" },
   logoLine: { display: "flex", alignItems: "center", gap: 12, marginBottom: 4 },
   badge: {
-    width: 36, height: 36,
+    width: 36,
+    height: 36,
     background: "#b5f542",
     borderRadius: "50%",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontWeight: 700, fontSize: 14, color: "#0f1117",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: 700,
+    fontSize: 14,
+    color: "#0f1117",
     flexShrink: 0,
   },
   h1: {
     fontFamily: "'Space Grotesk', sans-serif",
-    fontSize: 22, fontWeight: 600,
-    color: "#ffffff", margin: 0, letterSpacing: "-0.3px",
+    fontSize: 22,
+    fontWeight: 600,
+    color: "#ffffff",
+    margin: 0,
+    letterSpacing: "-0.3px",
   },
   subtitle: { fontSize: 13, color: "#6b7280", marginLeft: 48 },
 
@@ -238,7 +321,8 @@ const s = {
   },
   label: {
     display: "block",
-    fontSize: 12, fontWeight: 500,
+    fontSize: 12,
+    fontWeight: 500,
     color: "#9ca3af",
     textTransform: "uppercase",
     letterSpacing: "0.6px",
@@ -260,13 +344,21 @@ const s = {
   },
   selectArrow: {
     position: "absolute",
-    right: 14, top: "50%",
+    right: 14,
+    top: "50%",
     transform: "translateY(-50%)",
-    width: 0, height: 0,
+    width: 0,
+    height: 0,
     borderLeft: "5px solid transparent",
     borderRight: "5px solid transparent",
     borderTop: "5px solid #6b7280",
     pointerEvents: "none",
+  },
+  selectDisabled: {
+    background: "#0f1117",
+    color: "#4b5563",
+    cursor: "not-allowed",
+    opacity: 0.6,
   },
   launchBtn: {
     marginTop: "1rem",
@@ -277,7 +369,8 @@ const s = {
     borderRadius: 8,
     padding: 12,
     fontFamily: "'Space Grotesk', sans-serif",
-    fontSize: 14, fontWeight: 600,
+    fontSize: 14,
+    fontWeight: 600,
     cursor: "pointer",
   },
   launchBtnDisabled: {
@@ -287,7 +380,8 @@ const s = {
   },
 
   ball: {
-    width: 28, height: 28,
+    width: 28,
+    height: 28,
     background: "#b5f542",
     borderRadius: "50%",
     margin: "0 auto 1.5rem",
@@ -295,13 +389,19 @@ const s = {
   },
   loadingTitle: {
     fontFamily: "'Space Grotesk', sans-serif",
-    fontSize: 15, fontWeight: 500,
-    color: "#ffffff", textAlign: "center", marginBottom: 6,
+    fontSize: 15,
+    fontWeight: 500,
+    color: "#ffffff",
+    textAlign: "center",
+    marginBottom: 6,
   },
   loadingSub: { fontSize: 13, color: "#6b7280", textAlign: "center" },
   progressBar: {
-    marginTop: "1.5rem", height: 3,
-    background: "#2d3148", borderRadius: 2, overflow: "hidden",
+    marginTop: "1.5rem",
+    height: 3,
+    background: "#2d3148",
+    borderRadius: 2,
+    overflow: "hidden",
   },
   progressFill: {
     height: "100%",
@@ -311,27 +411,40 @@ const s = {
   },
 
   resultsHeader: {
-    display: "flex", alignItems: "center",
+    display: "flex",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: "1.25rem", flexWrap: "wrap", gap: 12,
+    marginBottom: "1.25rem",
+    flexWrap: "wrap",
+    gap: 12,
   },
   clubBadge: {
-    display: "flex", alignItems: "center", gap: 8,
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
     fontFamily: "'Space Grotesk', sans-serif",
-    fontSize: 15, fontWeight: 500, color: "#ffffff",
+    fontSize: 15,
+    fontWeight: 500,
+    color: "#ffffff",
   },
   clubDot: {
-    width: 8, height: 8,
-    background: "#b5f542", borderRadius: "50%", flexShrink: 0,
+    width: 8,
+    height: 8,
+    background: "#b5f542",
+    borderRadius: "50%",
+    flexShrink: 0,
   },
   downloadBtn: {
-    display: "flex", alignItems: "center", gap: 6,
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
     background: "transparent",
     border: "0.5px solid #b5f542",
     color: "#b5f542",
     borderRadius: 8,
     padding: "8px 14px",
-    fontSize: 13, fontWeight: 500,
+    fontSize: 13,
+    fontWeight: 500,
     cursor: "pointer",
     textDecoration: "none",
   },
@@ -351,7 +464,8 @@ const s = {
   plotHeader: {
     padding: "10px 14px",
     borderBottom: "0.5px solid #2d3148",
-    fontSize: 12, fontWeight: 500,
+    fontSize: 12,
+    fontWeight: 500,
     color: "#9ca3af",
     textTransform: "uppercase",
     letterSpacing: "0.5px",
@@ -372,7 +486,9 @@ const s = {
     padding: "8px 14px",
     fontSize: 13,
     cursor: "pointer",
-    display: "flex", alignItems: "center", gap: 6,
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
     marginTop: "1rem",
     fontFamily: "inherit",
   },
