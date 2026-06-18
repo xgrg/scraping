@@ -1,23 +1,5 @@
-import { useState } from "react";
-
-
-const CLUBS = {
-    "11660020": "Argèles Tennis de Table",
-    "11660013": "Bourg Madame TT",
-    "11660044": "Canet Roussillon Tennis de Table",
-    "11660001": "Canohes Toulouges Tennis de Table",
-    "11660008": "Côte Vermeille TT",
-    "11660031": "ENT Vallespir Tennis de Table",
-    "11660043": "Illenc Tennis de Taule",
-    "11660032": "Millas Tennis de Table",
-    "11660009": "Perpignan Roussillon TT",
-    "11660011": "Perpignan St Gauderique TT",
-    "11660041": "Prades Conflent Canigó TT",
-    "11660003": "Rivesaltes CTT",
-    "11660021": "TT Club Laurentin",
-    "11660007": "TT Thuirinois",
-    "11660019": "US Torreilles US TT",
-};
+import { useState, useEffect } from "react";
+import CLUBS from "./clubs.json";
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -58,13 +40,14 @@ function IconPoster({ active }) {
 }
 
 // ── Page Stats ──────────────────────────────────────────────────────────────
-function PageStats() {
-    const [clubId, setClubId] = useState("");
+function PageStats({ initialClubId }) {
+    const [clubId, setClubId] = useState(initialClubId ?? "");
     const [status, setStatus] = useState("idle"); // idle | loading | done | error
     const [step, setStep] = useState(0);
     const [progress, setProgress] = useState(0);
     const [result, setResult] = useState(null);
     const [errorMsg, setErrorMsg] = useState("");
+    const [autoLaunch, setAutoLaunch] = useState(!!initialClubId);
 
     async function handleLaunch() {
         if (!clubId) return;
@@ -102,6 +85,8 @@ function PageStats() {
             clearInterval(interval);
             setErrorMsg(e.message);
             setStatus("error");
+        } finally {
+            setAutoLaunch(false);
         }
     }
 
@@ -113,7 +98,14 @@ function PageStats() {
         setErrorMsg("");
         setProgress(0);
         setStep(0);
+        setAutoLaunch(false);
     }
+
+    useEffect(() => {
+        if (autoLaunch && clubId) {
+            handleLaunch();
+        }
+    }, [autoLaunch, clubId]);
 
     return (
         
@@ -125,7 +117,7 @@ function PageStats() {
                 </div>
                 <p style={s.subtitle}>
                     Sélectionne un club pour générer ses statistiques de saison
-                </p>
+                </p>                
                 </header>
 
                 {/* ── Selector ── */}
@@ -241,11 +233,13 @@ function PageStats() {
                     </button>
                 </div>
                 )}
+            {status === "idle" && (
 
-            <div style={s.placeholder}>
-                <div style={s.placeholderIcon}>📊</div>
-                <p style={s.placeholderText}>Les graphiques apparaîtront ici</p>
-            </div>
+                <div style={s.placeholder}>
+                    <div style={s.placeholderIcon}>📊</div>
+                    <p style={s.placeholderText}>Les graphiques apparaîtront ici</p>
+                </div>
+            )}
 
         </div>
     );
@@ -425,14 +419,28 @@ function PagePoster() {
 
 // ── App shell avec bottom nav ───────────────────────────────────────────────
 export default function App() {
-    const [tab, setTab] = useState("stats");
-    
+    const [visitors, setVisitors] = useState(null);
+    const [query] = useState(() => new URLSearchParams(window.location.search));
+    const requestedId = query.get("id")?.trim() ?? "";
+    const initialClubId = CLUBS[requestedId] ? requestedId : "";
+    const [tab, setTab] = useState(query.get("tab") === "poster" ? "poster" : "stats");
+
+    useEffect(() => {
+    fetch(`${API_BASE}/visitors`)
+        .then(r => r.json())
+        .then(d => setVisitors(d.unique_visitors));
+    }, []);
 
     return (
         <div style={s.shell}>
             {/* Contenu scrollable */}
-            <div style={s.content}>
-                {tab === "stats" && <PageStats />}
+            <div style={s.content}>                
+                {visitors && (
+                    <p style={{ fontSize: 11, color: "#374151", marginLeft: 42 }}>
+                    {visitors} visiteurs uniques
+                    </p>
+                    )}
+                {tab === "stats" && <PageStats initialClubId={initialClubId} />}
                 {tab === "poster" && <PagePoster />}
             </div>
 
@@ -450,6 +458,7 @@ export default function App() {
                         Affiche
                     </span>
                 </button>
+        
             </nav>
         </div>
     );

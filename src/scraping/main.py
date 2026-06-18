@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import json
+from fastapi import Request
 from scraping.client import FFTTClient
 from scraping.social import generate_poster, filter_by_match_day
 from scraping.stats import analyze_home_away_performance
@@ -30,23 +32,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CLUBS = {
-    "11660020": "ARGELES TENNIS DE TABLE",
-    "11660013": "BOURG MADAME TT",
-    "11660044": "CANET ROUSSILLON TENNIS DE TABLE",
-    "11660001": "CANOHES TOULOUGES TENNIS DE TABL",
-    "11660008": "COTE VERMEILLE TT",
-    "11660031": "ENT VALLESPIR TENNIS DE TABLE",
-    "11660043": "ILLENC TENNIS DE TAULE",
-    "11660032": "MILLAS TENNIS DE TABLE",
-    "11660009": "PERPIGNAN ROUSSILLON TENNIS DE T",
-    "11660011": "PERPIGNAN ST GAUDERIQUE TT",
-    "11660041": "PRADES CONFLENT CANIGÓ TT",
-    "11660003": "RIVESALTES CTT",
-    "11660021": "TENNIS DE TABLE CLUB LAURENTIN",
-    "11660007": "TT Thuirinois",
-    "11660019": "US TORREILLES US TT",
-}
+
+COUNTER_FILE = Path("visitors.json")
+
+
+def _load_visitors():
+    if COUNTER_FILE.exists():
+        return json.loads(COUNTER_FILE.read_text())
+    return {"count": 0, "ips": []}
+
+
+def _save_visitors(data):
+    COUNTER_FILE.write_text(json.dumps(data))
+
+
+@app.middleware("http")
+async def count_visitors(request: Request, call_next):
+    ip = (
+        request.headers.get("x-forwarded-for", request.client.host)
+        .split(",")[0]
+        .strip()
+    )
+    data = _load_visitors()
+    if ip not in data["ips"]:
+        data["ips"].append(ip)
+        data["count"] += 1
+        _save_visitors(data)
+    return await call_next(request)
+
+
+@app.get("/visitors")
+def get_visitors():
+    data = _load_visitors()
+    print(data)
+    return {"unique_visitors": data["count"]}
+
+
+# Load clubs mapping from shared JSON file (app/src/clubs.json)
+ROOT = Path(__file__).resolve().parents[2]
+CLUBS_FILE = ROOT / "app" / "src" / "clubs.json"
+if CLUBS_FILE.exists():
+    try:
+        CLUBS = json.loads(CLUBS_FILE.read_text())
+    except Exception:
+        CLUBS = {}
+else:
+    CLUBS = {}
 
 OUTPUT_DIR = Path("outputs")
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -118,7 +149,7 @@ def analyze(req: AnalyzeRequest):
             )
 
         # --- Excel (stored in outputs/ for download) ---
-        safe_name = club_name.lower().replace(" ", "_")[:40]
+        safe_name = club_name.lower().replace(" ", "_").replace("/", "_")[:40]
         excel_path = OUTPUT_DIR / f"{safe_name}.xlsx"
 
         try:
