@@ -28,9 +28,7 @@ def _load_lid(config_path=None):
     .fftt_config in the repository root.
     """
     if config_path is None:
-        config_path = os.path.normpath(
-            os.path.join(os.path.dirname(__file__), "..", "..", ".fftt_config")
-        )
+        config_path = os.path.expanduser("~/.fftt_config")
 
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Missing FFTT client config file: {config_path}")
@@ -39,15 +37,11 @@ def _load_lid(config_path=None):
         try:
             config = json.load(handle)
         except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Invalid JSON in FFTT client config file: {config_path}"
-            ) from exc
+            raise ValueError(f"Invalid JSON in FFTT client config file: {config_path}") from exc
 
     lid = config.get("lid")
     if not lid:
-        raise ValueError(
-            f"FFTT client config file must contain a 'lid' value: {config_path}"
-        )
+        raise ValueError(f"FFTT client config file must contain a 'lid' value: {config_path}")
 
     return lid
 
@@ -69,9 +63,7 @@ class FFTTClient:
         """
         if cookies is None:
             if config_path is None:
-                config_path = os.path.normpath(
-                    os.path.join(os.path.dirname(__file__), "..", "..", ".fftt_config")
-                )
+                config_path = os.path.expanduser("~/.fftt_config")
 
             lid = _load_lid(config_path)
             self.cookies = {"lid": lid}
@@ -280,9 +272,7 @@ class FFTTClient:
                     return players, np.nan
 
                 try:
-                    team_ranking = int(
-                        rows[0].select_one("p.rich-button").get_text(strip=True)
-                    )
+                    team_ranking = int(rows[0].select_one("p.rich-button").get_text(strip=True))
                 except Exception:
                     team_ranking = np.nan
 
@@ -292,9 +282,7 @@ class FFTTClient:
                     try:
                         name = row.select_one("div.labels p").get_text(strip=True)
 
-                        ranking = int(
-                            row.select_one("p.rich-button").get_text(strip=True)
-                        )
+                        ranking = int(row.select_one("p.rich-button").get_text(strip=True))
 
                         players[name] = {
                             "position": pos,
@@ -306,13 +294,9 @@ class FFTTClient:
 
                 return players, team_ranking
 
-            left_players, left_team_ranking = build_player_map(
-                left_team, ["A", "B", "C", "D"]
-            )
+            left_players, left_team_ranking = build_player_map(left_team, ["A", "B", "C", "D"])
 
-            right_players, right_team_ranking = build_player_map(
-                right_team, ["W", "X", "Y", "Z"]
-            )
+            right_players, right_team_ranking = build_player_map(right_team, ["W", "X", "Y", "Z"])
 
         else:
             left_players = {}
@@ -353,23 +337,15 @@ class FFTTClient:
             left_name = left.get_text(" ", strip=True)
             right_name = right.get_text(" ", strip=True)
 
-            left_win = bool(
-                li.select_one("span.pos.left, a.labels-fragment.left span.pos")
-            )
+            left_win = bool(li.select_one("span.pos.left, a.labels-fragment.left span.pos"))
 
-            right_win = bool(
-                li.select_one("span.pos.right, a.labels-fragment.right span.pos")
-            )
+            right_win = bool(li.select_one("span.pos.right, a.labels-fragment.right span.pos"))
 
             if left_name == "Joueur absent" or right_name == "Joueur absent":
-                logger.warning(
-                    f"Skipping match with absent player: {left_name} vs {right_name}"
-                )
+                logger.warning(f"Skipping match with absent player: {left_name} vs {right_name}")
                 continue
             if left_name == " " or right_name == " ":
-                logger.warning(
-                    f"Skipping match with absent player: {left_name} vs {right_name}"
-                )
+                logger.warning(f"Skipping match with absent player: {left_name} vs {right_name}")
                 continue
             is_double = " et " in left_name or " et " in right_name
 
@@ -399,9 +375,7 @@ class FFTTClient:
                     player_opponent = left_name
                     wins = right_win
 
-                home_info = home_players.get(
-                    player_home, {"position": None, "ranking": np.nan}
-                )
+                home_info = home_players.get(player_home, {"position": None, "ranking": np.nan})
 
                 opponent_info = opponent_players.get(
                     player_opponent, {"position": None, "ranking": np.nan}
@@ -531,9 +505,7 @@ class FFTTClient:
             for team_name, team_matches in self.matches[idx_phase].items():
                 for idx_match, html in enumerate(team_matches, start=1):
                     if html is None:
-                        logger.info(
-                            f"Skipping match {idx_match} for team {team_name} (no link)."
-                        )
+                        logger.info(f"Skipping match {idx_match} for team {team_name} (no link).")
                         continue
                     try:
                         match, simples, doubles = self._parse_match(
@@ -544,7 +516,8 @@ class FFTTClient:
                         all_doubles.extend(doubles)
                     except Exception:
                         logger.error(
-                            f"Parsing match {idx_match} for team {team_name} in phase {idx_phase} resulted in error."
+                            f"Parsing match {idx_match} for team {team_name} in phase {idx_phase}"
+                            " resulted in error."
                         )
 
         return (

@@ -15,13 +15,7 @@ def normalize_cat(x):
     s = s.split("-")[-1]
 
     # Remove accents and non-alphanumeric characters
-    s = (
-        s.replace("É", "E")
-        .replace("È", "E")
-        .replace("Ê", "E")
-        .replace("À", "A")
-        .replace("Ç", "C")
-    )
+    s = s.replace("É", "E").replace("È", "E").replace("Ê", "E").replace("À", "A").replace("Ç", "C")
     s = re.sub(r"[^A-Z0-9]", "", s)
 
     # Special categories
@@ -88,9 +82,7 @@ def filter_by_match_day(df, match_index, phase_index):
 
     # Safely convert scores to nullable integers
     for col in ["Score_Equipe", "Score_Adv"]:
-        output_df[col] = (
-            pd.to_numeric(output_df[col], errors="coerce").round().astype("Int64")
-        )
+        output_df[col] = pd.to_numeric(output_df[col], errors="coerce").round().astype("Int64")
 
     # Normalize category strings
     output_df["cat"] = output_df["cat"].apply(normalize_cat)
@@ -113,9 +105,7 @@ def fit_text(draw, text, max_width, font_path="arial.ttf", max_size=40):
     return ImageFont.truetype(font_path, 5)
 
 
-def generate_poster(
-    matchs, match_index, phase_index, output="resultats.svg", export_png=False
-):
+def generate_poster(matchs, match_index, phase_index, output="resultats.svg", export_png=False):
     """
     Generates an SVG poster with all matches involving THUIR for the provided index.
     - Scores displayed in neutral color
@@ -148,11 +138,7 @@ def generate_poster(
     )
 
     # Logo club
-    dwg.add(
-        dwg.image(
-            href="/home/goperto/downloads/logo.png", insert=(50, 20), size=(250, 245)
-        )
-    )
+    dwg.add(dwg.image(href="/home/goperto/downloads/logo.png", insert=(50, 20), size=(250, 245)))
 
     # Title and subtitle
     dwg.add(
@@ -195,9 +181,12 @@ def generate_poster(
         # Team scores from team's perspective
         if pd.notna(row.get("Score_Equipe")):
             score_thuir = int(row.get("Score_Equipe"))
-            score_adv = int(row.get("Score_Adv"))
         else:
             score_thuir = None
+
+        if pd.notna(row.get("Score_Adv")):
+            score_adv = int(row.get("Score_Adv"))
+        else:
             score_adv = None
 
         # Display order: home team on the left
@@ -221,16 +210,17 @@ def generate_poster(
             thuir_droite = True
 
         color_g = color_d = neutre
-        if thuir_gauche:
-            if score_g > score_d:
-                color_g = vert
-            elif score_g < score_d:
-                color_g = rouge
-        if thuir_droite:
-            if score_g < score_d:
-                color_d = vert
-            elif score_g > score_d:
-                color_d = rouge
+        if pd.notna(score_g) and pd.notna(score_d):
+            if thuir_gauche:
+                if score_g > score_d:
+                    color_g = vert
+                elif score_g < score_d:
+                    color_g = rouge
+            if thuir_droite:
+                if score_g < score_d:
+                    color_d = vert
+                elif score_g > score_d:
+                    color_d = rouge
 
         x_left, x_right = 100, largeur - 100
 
@@ -284,8 +274,8 @@ def generate_poster(
         )
 
         # Scores (always in neutral color)
-        if score_g is None and score_d is None:
-            score_g = "VS"
+        # if score_g is None and score_d is None:
+        #     score_g = "VS"
         dwg.add(
             dwg.text(
                 f"{score_g:02}",

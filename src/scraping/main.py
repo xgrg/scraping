@@ -49,11 +49,7 @@ def _save_visitors(data):
 
 @app.middleware("http")
 async def count_visitors(request: Request, call_next):
-    ip = (
-        request.headers.get("x-forwarded-for", request.client.host)
-        .split(",")[0]
-        .strip()
-    )
+    ip = request.headers.get("x-forwarded-for", request.client.host).split(",")[0].strip()
     data = _load_visitors()
     if ip not in data["ips"]:
         data["ips"].append(ip)
@@ -143,7 +139,7 @@ def analyze(req: AnalyzeRequest):
     try:
         client = FFTTClient(config_path=None)
         matches_df, simples_df, doubles_df = client.scrape_club(club_id)
-        logger.critical(matches_df["division"].unique())
+        logger.warning(f"Divisions found : {matches_df['division'].unique()}")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur API fédération : {e}")
 
@@ -166,22 +162,16 @@ def analyze(req: AnalyzeRequest):
             plot_team_series(matches_df, save_path=p_series)
             plot_team_match_matrix(matches_df, save_path=p_matrix)
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Erreur génération plots : {e}"
-            )
+            raise HTTPException(status_code=500, detail=f"Erreur génération plots : {e}")
 
         # --- Excel (stored in outputs/ for download) ---
         safe_name = club_name.lower().replace(" ", "_").replace("/", "_")[:40]
         excel_path = OUTPUT_DIR / f"{safe_name}.xlsx"
 
         try:
-            build_excel_report(
-                matches_df, simples_df, doubles_df, output_path=str(excel_path)
-            )
+            build_excel_report(matches_df, simples_df, doubles_df, output_path=str(excel_path))
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Erreur génération Excel : {e}"
-            )
+            raise HTTPException(status_code=500, detail=f"Erreur génération Excel : {e}")
 
         # --- base64 encoding of images ---
         return {
@@ -223,7 +213,7 @@ def generate_social_poster(req: SocialRequest):
     # try:
     client = FFTTClient(config_path=None)
     matches_df, _, _ = client.scrape_club(club_id, phases=[req.phase_index])
-    logger.critical(matches_df["division"].unique())
+    logger.warning("Divisions found : %s", matches_df["division"].unique())
     # except Exception as e:
     #    raise HTTPException(status_code=502, detail=f"Erreur API fédération : {e}")
 
@@ -231,6 +221,7 @@ def generate_social_poster(req: SocialRequest):
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         day_matchs = filter_by_match_day(matches_df, req.match_index, req.phase_index)
+
         generate_poster(
             matchs=day_matchs,
             match_index=req.match_index,

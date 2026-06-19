@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scraping"
+version = "0.1.0"
+description = "FFTT Club Scraper and Analysis Tool"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.28.0",
+    "pandas>=1.5.0",
+    "numpy>=1.20.0",
+    "beautifulsoup4>=4.11.0",
+    "loguru>=0.6.0",
+    "matplotlib>=3.5.0",
+    "openpyxl>=3.1.0",
+    "fastapi>=0.95.0",
+    "uvicorn>=0.20.0",
+    "python-multipart>=0.0.5",
+    "Pillow>=9.0.0",
+    "cairosvg>=2.7.0",
+    "svgwrite>=1.4.3"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.24.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "--cov=src/scraping --cov-report=term-missing --cov-report=xml --cov-fail-under=80"
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src/scraping"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+fail_under = 80
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+select = ["E", "F", "W"]

@@ -1,0 +1,11 @@
+# Tests
+tests/__pycache__/
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+
+# Frontend
+app/node_modules/
+app/coverage/
+app/dist/
